@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::config::abbrev::Trigger;
 use crate::opt::ListArgs;
 use shell_escape::escape;
 use std::borrow::Cow;
@@ -10,7 +11,10 @@ pub fn run(args: &ListArgs) {
 
 fn list<W: io::Write>(_args: &ListArgs, config: &Config, out: &mut W) -> Result<(), io::Error> {
     for abbrev in &config.abbrevs {
-        let abbr = &abbrev.abbr;
+        let abbr = match &abbrev.trigger {
+            Trigger::Abbr(abbr) => abbr,
+            Trigger::Regex(regex) => regex,
+        };
         let snippet = escape(Cow::from(&abbrev.snippet));
 
         writeln!(out, "{}={}", abbr, snippet)?;

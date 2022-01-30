@@ -32,14 +32,18 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
     let command_index = find_last_command_index(lbuffer);
     let command = lbuffer[command_index..].trim_start();
 
-    let (_, last_arg) = command
+    let (args_until_last, last_arg) = command
         .rsplit_once(char::is_whitespace)
         .unwrap_or(("", command));
+
+    let (context, internal_args) = args_until_last
+        .split_once (char::is_whitespace)
+        .unwrap_or ((args_until_last, ""));
 
     let abbrev = config
         .abbrevs
         .iter()
-        .find(|abbr| abbr.is_match(command, last_arg))?;
+        .find(|abbr| abbr.is_match(command, context, last_arg, internal_args.is_empty ()))?;
 
     let last_arg_index = lbuffer.len() - last_arg.len();
     let lbuffer_without_last_arg = &lbuffer[..last_arg_index];
