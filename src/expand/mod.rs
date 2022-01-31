@@ -19,8 +19,10 @@ pub fn run(args: &ExpandArgs) {
     if let Some(result) = expand(args, &Config::load_or_exit()) {
         let lbuffer_prev = escape(Cow::from(&result.lbuffer[..result.startindex]));
         let lbuffer_post = escape(Cow::from(&result.lbuffer[result.endindex..]));
+        let last_arg = escape(Cow::from(result.last_arg));
         let snippet = escape(Cow::from(result.snippet));
         let rbuffer = escape(Cow::from(result.rbuffer));
+        let evaluate = if result.evaluate { "(e)" } else { "" };
 
         let (joint_append, joint_prepend) = if result.startindex == result.endindex {
             if result.startindex == result.lbuffer.len() {
@@ -32,18 +34,17 @@ pub fn run(args: &ExpandArgs) {
             ("", "")
         };
 
-        if result.evaluate {
-            println!(
-                r#"local prev={};local post={};local snippet={};LBUFFER="${{prev}}{}${{snippet}}{}${{post}}";RBUFFER={};"#,
-                lbuffer_prev, lbuffer_post, snippet, joint_append, joint_prepend, rbuffer
-            );
-        } else {
-            let last_arg = escape(Cow::from(result.last_arg));
-            println!(
-                r#"local prev={};local post={};local snippet={} {};LBUFFER="${{prev}}{}${{(e)snippet}}{}${{post}}";RBUFFER={};"#,
-                lbuffer_prev, lbuffer_post, snippet, last_arg, joint_append, joint_prepend, rbuffer
-            );
-        }
+        println!(
+            r#"local snippet={};set -- {};snippet="${{{}snippet}}";[[ $? -eq 0 ]] && {{ LBUFFER={}"{}${{(pj: :)${{(f)snippet}}}}{}"{};RBUFFER={};}};"#,
+            snippet,
+            last_arg,
+            evaluate,
+            lbuffer_prev,
+            joint_append,
+            joint_prepend,
+            lbuffer_post,
+            rbuffer
+        );
     }
 }
 

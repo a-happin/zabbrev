@@ -12,6 +12,7 @@ __zabrze::expand() {
 
 __zabrze::expand-and-insert-self() {
     zle __zabrze::expand
+    zle reset-prompt
     zle self-insert
 }
 
