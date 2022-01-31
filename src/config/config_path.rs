@@ -2,11 +2,11 @@ use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-static ZABRZE_CONFIG_FILE_ENV_KEY: &str = "ZABRZE_CONFIG_FILE";
+static ZABBREV_CONFIG_FILE_ENV_KEY: &str = "ZABBREV_CONFIG_FILE";
 static XDG_CONFIG_HOME_ENV_KEY: &str = "XDG_CONFIG_HOME";
 
-static DEFAULT_CONFIG_DIR: &str = "zabrze";
-static DEFAULT_CONFIG_FILE: &str = "config.yaml";
+static DEFAULT_CONFIG_DIR: &str = "zsh";
+static DEFAULT_CONFIG_FILE: &str = "zabbrev.yaml";
 
 trait ConfigPath {
     fn env(&self, key: &str) -> Option<OsString>;
@@ -26,9 +26,9 @@ impl ConfigPath for ConfigPathImpl {
 }
 
 fn get_default_path<C: ConfigPath>(c: &C) -> Option<PathBuf> {
-    // Return $ZABRZE_CONFIG_FILE if defined
-    if let Some(zabrze_config_file) = c.env(ZABRZE_CONFIG_FILE_ENV_KEY).map(PathBuf::from) {
-        return Some(zabrze_config_file);
+    // Return $ZABBREV_CONFIG_FILE if defined
+    if let Some(zabbrev_config_file) = c.env(ZABBREV_CONFIG_FILE_ENV_KEY).map(PathBuf::from) {
+        return Some(zabbrev_config_file);
     }
 
     // Get ${XDG_CONFIG_HOME:-$HOME/.config}
@@ -41,7 +41,7 @@ fn get_default_path<C: ConfigPath>(c: &C) -> Option<PathBuf> {
             path
         };
 
-    // Return $config_path/zabrze/config.yaml
+    // Return $config_path/zsh/zabbrev.yaml
     let mut config_path = config_home;
     config_path.push(DEFAULT_CONFIG_DIR);
     config_path.push(DEFAULT_CONFIG_FILE);
@@ -83,9 +83,9 @@ mod tests {
 
         let scenarios = [
             Scenario {
-                testname: "follow ZABRZE_CONFIG_FILE",
+                testname: "follow ZABBREV_CONFIG_FILE",
                 envs: vec![
-                    ("ZABRZE_CONFIG_FILE", "/home/user/.zabrze.yaml"),
+                    ("ZABBREV_CONFIG_FILE", "/home/user/.zabrze.yaml"),
                     ("XDG_CONFIG_HOME", "/home/user/.xdgConfig"),
                 ]
                 .into_iter()
@@ -99,13 +99,13 @@ mod tests {
                     .into_iter()
                     .collect(),
                 home: "/home/user/",
-                expected: "/home/user/.xdgConfig/zabrze/config.yaml",
+                expected: "/home/user/.xdgConfig/zsh/zabbrev.yaml",
             },
             Scenario {
                 testname: "use default path",
                 envs: HashMap::new(),
                 home: "/home/user/",
-                expected: "/home/user/.config/zabrze/config.yaml",
+                expected: "/home/user/.config/zsh/zabbrev.yaml",
             },
         ];
 
