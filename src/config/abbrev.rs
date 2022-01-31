@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 pub enum Trigger {
     #[serde(rename = "abbr")]
     Abbr(String),
-    #[serde(rename = "regex")]
-    Regex(String),
+    #[serde(rename = "abbr-regex")]
+    AbbrRegex(String),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -73,7 +73,7 @@ impl Abbrev {
 
         match self.trigger {
             Trigger::Abbr(ref abbr) => last_arg == abbr,
-            Trigger::Regex(ref regex) => {
+            Trigger::AbbrRegex(ref regex) => {
                 let pattern_or_error = Regex::new(regex);
                 match pattern_or_error {
                     Ok(pattern) => pattern.is_match(last_arg),
@@ -323,7 +323,7 @@ mod tests {
                     name: None,
                     context: "".to_string(),
                     global: false,
-                    trigger: Trigger::Regex(".+".to_string()),
+                    trigger: Trigger::AbbrRegex(".+".to_string()),
                     snippet: String::new(),
                     operation: Operation::ReplaceSelf,
                     expansion: false,
@@ -338,7 +338,7 @@ mod tests {
                     name: None,
                     context: "".to_string(),
                     global: false,
-                    trigger: Trigger::Regex(".+".to_string()),
+                    trigger: Trigger::AbbrRegex(".+".to_string()),
                     snippet: String::new(),
                     operation: Operation::ReplaceSelf,
                     expansion: false,
@@ -353,7 +353,7 @@ mod tests {
                     name: None,
                     context: "".to_string(),
                     global: false,
-                    trigger: Trigger::Regex(".+".to_string()),
+                    trigger: Trigger::AbbrRegex(".+".to_string()),
                     snippet: String::new(),
                     operation: Operation::ReplaceSelf,
                     expansion: false,
@@ -368,7 +368,7 @@ mod tests {
                     name: None,
                     context: "test".to_string(),
                     global: false,
-                    trigger: Trigger::Regex(".+".to_string()),
+                    trigger: Trigger::AbbrRegex(".+".to_string()),
                     snippet: String::new(),
                     operation: Operation::ReplaceSelf,
                     expansion: false,
@@ -383,7 +383,7 @@ mod tests {
                     name: None,
                     context: "echo".to_string(),
                     global: false,
-                    trigger: Trigger::Regex(".+".to_string()),
+                    trigger: Trigger::AbbrRegex(".+".to_string()),
                     snippet: String::new(),
                     operation: Operation::ReplaceSelf,
                     expansion: false,
@@ -398,7 +398,7 @@ mod tests {
                     name: None,
                     context: "echo".to_string(),
                     global: false,
-                    trigger: Trigger::Regex(".+".to_string()),
+                    trigger: Trigger::AbbrRegex(".+".to_string()),
                     snippet: String::new(),
                     operation: Operation::ReplaceSelf,
                     expansion: false,

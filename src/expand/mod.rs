@@ -141,12 +141,12 @@ mod tests {
 
               - name: fake command
                 context: 'extract'
-                regex: '\.tar$'
+                abbr-regex: '\.tar$'
                 snippet: 'tar -xvf'
                 operation: replace-command
 
               - name: associated command
-                regex: '\.java$'
+                abbr-regex: '\.java$'
                 snippet: 'java -jar'
                 operation: prepend
             ",
