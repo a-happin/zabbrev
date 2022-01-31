@@ -1,3 +1,4 @@
+use crate::config::abbrev::Operation;
 use crate::config::Config;
 use crate::opt::ExpandArgs;
 use shell_escape::escape;
@@ -5,7 +6,10 @@ use std::borrow::Cow;
 
 #[derive(Debug, PartialEq)]
 pub struct ExpandResult<'a> {
-    pub command: &'a str,
+    pub lbuffer: &'a str,
+    pub startindex: usize,
+    pub endindex: usize,
+    pub last_arg: &'a str,
     pub snippet: &'a str,
     pub evaluate: bool,
     pub rbuffer: &'a str,
@@ -13,15 +17,33 @@ pub struct ExpandResult<'a> {
 
 pub fn run(args: &ExpandArgs) {
     if let Some(result) = expand(args, &Config::load_or_exit()) {
-        let command = escape(Cow::from(result.command));
+        let lbuffer_prev = escape(Cow::from(&result.lbuffer[..result.startindex]));
+        let lbuffer_post = escape(Cow::from(&result.lbuffer[result.endindex..]));
         let snippet = escape(Cow::from(result.snippet));
         let rbuffer = escape(Cow::from(result.rbuffer));
-        let evaluate = if result.evaluate { "(e)" } else { "" };
 
-        println!(
-            r#"local command={};local snippet={};LBUFFER="${{command}}${{{}snippet}}";RBUFFER={};"#,
-            command, snippet, evaluate, rbuffer
-        );
+        let (joint_append, joint_prepend) = if result.startindex == result.endindex {
+            if result.startindex == result.lbuffer.len() {
+                (" ", "")
+            } else {
+                ("", " ")
+            }
+        } else {
+            ("", "")
+        };
+
+        if result.evaluate {
+            println!(
+                r#"local prev={};local post={};local snippet={};LBUFFER="${{prev}}{}${{snippet}}{}${{post}}";RBUFFER={};"#,
+                lbuffer_prev, lbuffer_post, snippet, joint_append, joint_prepend, rbuffer
+            );
+        } else {
+            let last_arg = escape(Cow::from(result.last_arg));
+            println!(
+                r#"local prev={};local post={};local snippet={} {};LBUFFER="${{prev}}{}${{(e)snippet}}{}${{post}}";RBUFFER={};"#,
+                lbuffer_prev, lbuffer_post, snippet, last_arg, joint_append, joint_prepend, rbuffer
+            );
+        }
     }
 }
 
@@ -36,20 +58,47 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         .rsplit_once(char::is_whitespace)
         .unwrap_or(("", command));
 
+    if last_arg.is_empty() {
+        return None;
+    }
+
     let (context, internal_args) = args_until_last
-        .split_once (char::is_whitespace)
-        .unwrap_or ((args_until_last, ""));
+        .split_once(char::is_whitespace)
+        .unwrap_or((args_until_last, ""));
 
     let abbrev = config
         .abbrevs
         .iter()
-        .find(|abbr| abbr.is_match(command, context, last_arg, internal_args.is_empty ()))?;
+        .find(|abbr| abbr.is_match(command, context, last_arg, internal_args.is_empty()))?;
 
-    let last_arg_index = lbuffer.len() - last_arg.len();
-    let lbuffer_without_last_arg = &lbuffer[..last_arg_index];
+    let (startindex, endindex) = match abbrev.operation {
+        Operation::ReplaceSelf => {
+            let index = lbuffer.len() - last_arg.len();
+            (index, lbuffer.len())
+        }
+        Operation::ReplaceCommand => {
+            let index = lbuffer.len() - command.len();
+            (index, index + context.len())
+        }
+        Operation::ReplaceAll => {
+            let index = lbuffer.len() - command.len();
+            (index, lbuffer.len())
+        }
+        Operation::Append => {
+            let index = lbuffer.len();
+            (index, index)
+        }
+        Operation::Prepend => {
+            let index = lbuffer.len() - command.len();
+            (index, index)
+        }
+    };
 
     Some(ExpandResult {
-        command: lbuffer_without_last_arg,
+        lbuffer,
+        startindex,
+        endindex,
+        last_arg,
         snippet: &abbrev.snippet,
         evaluate: abbrev.evaluate,
         rbuffer,
@@ -71,11 +120,11 @@ mod tests {
               - name: git commit
                 abbr: c
                 snippet: commit
-                global: true
-                context: '^git '
+                global: false
+                context: 'git'
 
               - name: '>/dev/null'
-                abbr: null
+                abbr: 'null'
                 snippet: '>/dev/null'
                 global: true
 
@@ -83,6 +132,22 @@ mod tests {
                 abbr: home
                 snippet: $HOME
                 evaluate: true
+
+              - name: default argument
+                abbr: rm
+                snippet: -i
+                operation: append
+
+              - name: fake command
+                context: 'extract'
+                regex: '\.tar$'
+                snippet: 'tar -xvf'
+                operation: replace-command
+
+              - name: associated command
+                regex: '\.java$'
+                snippet: 'java -jar'
+                operation: prepend
             ",
         )
         .unwrap()
@@ -111,7 +176,10 @@ mod tests {
                 lbuffer: "g",
                 rbuffer: "",
                 expected: Some(ExpandResult {
-                    command: "",
+                    lbuffer: "g",
+                    startindex: 0,
+                    endindex: 1,
+                    last_arg: "g",
                     snippet: "git",
                     evaluate: false,
                     rbuffer: "",
@@ -122,7 +190,10 @@ mod tests {
                 lbuffer: "g",
                 rbuffer: " --pager=never",
                 expected: Some(ExpandResult {
-                    command: "",
+                    lbuffer: "g",
+                    startindex: 0,
+                    endindex: 1,
+                    last_arg: "g",
                     snippet: "git",
                     evaluate: false,
                     rbuffer: " --pager=never",
@@ -133,7 +204,10 @@ mod tests {
                 lbuffer: "echo hello; g",
                 rbuffer: "",
                 expected: Some(ExpandResult {
-                    command: "echo hello; ",
+                    lbuffer: "echo hello; g",
+                    startindex: 12,
+                    endindex: 13,
+                    last_arg: "g",
                     snippet: "git",
                     evaluate: false,
                     rbuffer: "",
@@ -144,7 +218,10 @@ mod tests {
                 lbuffer: "echo hello null",
                 rbuffer: "",
                 expected: Some(ExpandResult {
-                    command: "echo hello ",
+                    lbuffer: "echo hello null",
+                    startindex: 11,
+                    endindex: 15,
+                    last_arg: "null",
                     snippet: ">/dev/null",
                     evaluate: false,
                     rbuffer: "",
@@ -155,7 +232,10 @@ mod tests {
                 lbuffer: "echo hello; git c",
                 rbuffer: " -m hello",
                 expected: Some(ExpandResult {
-                    command: "echo hello; git ",
+                    lbuffer: "echo hello; git c",
+                    startindex: 16,
+                    endindex: 17,
+                    last_arg: "c",
                     snippet: "commit",
                     evaluate: false,
                     rbuffer: " -m hello",
@@ -178,9 +258,54 @@ mod tests {
                 lbuffer: "home",
                 rbuffer: "",
                 expected: Some(ExpandResult {
-                    command: "",
+                    lbuffer: "home",
+                    startindex: 0,
+                    endindex: 4,
+                    last_arg: "home",
                     snippet: "$HOME",
                     evaluate: true,
+                    rbuffer: "",
+                }),
+            },
+            Scenario {
+                testname: "default argument abbr",
+                lbuffer: "rm",
+                rbuffer: "",
+                expected: Some(ExpandResult {
+                    lbuffer: "rm",
+                    startindex: 2,
+                    endindex: 2,
+                    last_arg: "rm",
+                    snippet: "-i",
+                    evaluate: false,
+                    rbuffer: "",
+                }),
+            },
+            Scenario {
+                testname: "fake command abbr",
+                lbuffer: "extract test.tar",
+                rbuffer: "",
+                expected: Some(ExpandResult {
+                    lbuffer: "extract test.tar",
+                    startindex: 0,
+                    endindex: 7,
+                    last_arg: "test.tar",
+                    snippet: "tar -xvf",
+                    evaluate: false,
+                    rbuffer: "",
+                }),
+            },
+            Scenario {
+                testname: "associated command abbr",
+                lbuffer: "test.java",
+                rbuffer: "",
+                expected: Some(ExpandResult {
+                    lbuffer: "test.java",
+                    startindex: 0,
+                    endindex: 0,
+                    last_arg: "test.java",
+                    snippet: "java -jar",
+                    evaluate: false,
                     rbuffer: "",
                 }),
             },

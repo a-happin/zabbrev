@@ -1,5 +1,5 @@
-use crate::config::Config;
 use crate::config::abbrev::Trigger;
+use crate::config::Config;
 use crate::opt::ListArgs;
 use shell_escape::escape;
 use std::borrow::Cow;
@@ -42,7 +42,7 @@ mod tests {
                 context: '^git '
 
               - name: '>/dev/null'
-                abbr: null
+                abbr: 'null'
                 snippet: '>/dev/null'
                 global: true
 

@@ -10,7 +10,7 @@ pub enum Trigger {
     Regex(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Operation {
     #[serde(rename = "replace-self")]
     ReplaceSelf,
@@ -52,15 +52,18 @@ pub struct Abbrev {
 }
 
 impl Abbrev {
-    pub fn is_match(&self, _command: &str, context: &str, last_arg: &str, is_no_internal_args: bool) -> bool {
-        if !(self.context == "" && self.global)
-        {
-            if self.context != context
-            {
+    pub fn is_match(
+        &self,
+        _command: &str,
+        context: &str,
+        last_arg: &str,
+        is_no_internal_args: bool,
+    ) -> bool {
+        if !(self.context == "" && self.global) {
+            if self.context != context {
                 return false;
             }
-            if !self.global && !is_no_internal_args
-            {
+            if !self.global && !is_no_internal_args {
                 return false;
             }
         }
@@ -78,27 +81,27 @@ impl Abbrev {
 
                         eprintln!("{}", error_style.paint(error_message));
                         false
-                    },
+                    }
                 }
-            },
+            }
         }
 
-//         let pattern_or_error = match self.context.as_ref().map(|ctx| Regex::new(ctx)) {
-//             Some(pattern_or_error) => pattern_or_error,
-//             None => return true,
-//         };
+        //         let pattern_or_error = match self.context.as_ref().map(|ctx| Regex::new(ctx)) {
+        //             Some(pattern_or_error) => pattern_or_error,
+        //             None => return true,
+        //         };
 
-//         match pattern_or_error {
-//             Ok(pattern) => pattern.is_match(command),
-//             Err(err) => {
-//                 let name = self.name.as_ref().unwrap_or(&self.snippet);
-//                 let error_message = format!("invalid regex in abbrev '{}': {}", name, err);
-//                 let error_style = Color::Red.normal();
+        //         match pattern_or_error {
+        //             Ok(pattern) => pattern.is_match(command),
+        //             Err(err) => {
+        //                 let name = self.name.as_ref().unwrap_or(&self.snippet);
+        //                 let error_message = format!("invalid regex in abbrev '{}': {}", name, err);
+        //                 let error_style = Color::Red.normal();
 
-//                 eprintln!("{}", error_style.paint(error_message));
-//                 false
-//             }
-//         }
+        //                 eprintln!("{}", error_style.paint(error_message));
+        //                 false
+        //             }
+        //         }
     }
 }
 
@@ -385,21 +388,23 @@ mod tests {
         ];
 
         for s in scenarios {
-            let (until_last_args, last_arg) = s.command
-                .rsplit_once (char::is_whitespace)
-                .unwrap_or (("", s.command));
+            let (until_last_args, last_arg) = s
+                .command
+                .rsplit_once(char::is_whitespace)
+                .unwrap_or(("", s.command));
 
             let (context, internal_args) = until_last_args
-                .split_once (char::is_whitespace)
-                .unwrap_or ((until_last_args, ""));
+                .split_once(char::is_whitespace)
+                .unwrap_or((until_last_args, ""));
 
-            println! ("command = {}", s.command);
-            println! ("context = {}", context);
-            println! ("internal_args = {}", internal_args);
-            println! ("last_arg = {}", last_arg);
+            println!("command = {}", s.command);
+            println!("context = {}", context);
+            println!("internal_args = {}", internal_args);
+            println!("last_arg = {}", last_arg);
 
             assert_eq!(
-                s.abbr.is_match(s.command, context, last_arg, internal_args.is_empty ()),
+                s.abbr
+                    .is_match(s.command, context, last_arg, internal_args.is_empty()),
                 s.expected,
                 "{}",
                 s.testname
