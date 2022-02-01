@@ -60,10 +60,10 @@ impl Abbrev {
         is_no_internal_args: bool,
     ) -> bool {
         if !(self.context == "" && self.global) {
-            if self.context != context {
+            if !self.global && !is_no_internal_args {
                 return false;
             }
-            if !self.global && !is_no_internal_args {
+            if self.context != context {
                 return false;
             }
         }
