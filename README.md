@@ -203,8 +203,8 @@ behaves like zsh suffix aliases
 # ~/.config/zsh/zabbrev.yaml
 abbrevs:
   # associated command
-  - name: run java file
-    abbr-regex: '\.java$'
+  - name: run jar file
+    abbr-regex: '\.jar$'
     snippet: 'java -jar'
     operation: prepend
 ```
@@ -249,8 +249,8 @@ behaves like zsh global abbreviations
 # ~/.config/zsh/zabbrev.yaml
 abbrevs:
   # global abbreviations
-  - name: >/dev/null
-  - abbr: 'null'
+  - name: '>/dev/null'
+    abbr: 'null'
     snippet: '>/dev/null'
     global: true
 ```
