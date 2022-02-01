@@ -11,8 +11,7 @@ __zabbrev::expand() {
 }
 
 __zabbrev::expand-and-insert-self() {
-    zle __zabbrev::expand
-    zle reset-prompt
+    zle __zabbrev::expand && zle reset-prompt
     zle self-insert
 }
 
