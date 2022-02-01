@@ -35,7 +35,7 @@ pub fn run(args: &ExpandArgs) {
         };
 
         println!(
-            r#"local snippet={};set -- {};snippet="${{{}snippet}}";[[ $? -eq 0 ]] && {{ LBUFFER={}"{}${{(pj: :)${{(f)snippet}}}}{}"{};RBUFFER={};}};"#,
+            r#"local snippet={};set -- {};snippet="${{{}snippet}}";[[ $? -eq 0 ]] && {{ LBUFFER={}"{}${{(pj: :)${{(@f)snippet}}}}{}"{};RBUFFER={};}};"#,
             snippet,
             last_arg,
             evaluate,
