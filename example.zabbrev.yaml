@@ -1,0 +1,97 @@
+# ~/.config/zsh/zabbrev.yaml
+abbrevs:
+  # normal abbreviations
+  - name: git
+    abbr: 'g'
+    snippet: 'git'
+
+  - name: editor
+    abbr: 'e'
+    snippet: '${EDITOR}'
+    evaluate: true
+
+  # add default option
+  - name: mv -i
+    abbr: 'mv'
+    snippet: '-i'
+    operation: append
+
+  # prepend sudo
+  - name: sudo apt
+    abbr: 'apt'
+    snippet: 'sudo'
+    operation: prepend
+
+  # subcommand abbreviations
+  - name: git commit
+    context: 'git'
+    abbr: 'c'
+    snippet: 'commit'
+
+  - name: git push -u origin HEAD
+    context: 'git'
+    abbr: 'pu'
+    snippet: 'push -u origin HEAD'
+
+  - name: git pull --rebase origin CURRENT_BRANCH
+    context: 'git'
+    abbr: 'pr'
+    snippet: 'pull --rebase origin $(git symbolic-ref --short HEAD)'
+    evaluate: true
+
+  # fake command
+  - name: extract tar
+    context: 'extract'
+    abbr-regex: '\.tar$'
+    snippet: 'tar -xvf'
+    operation: replace-command
+
+  - name: compress tar
+    context: 'compress'
+    abbr-regex: '\.tar$'
+    snippet: 'tar -cvf'
+    operation: replace-command
+
+  # associated command
+  - name: run jar file
+    abbr-regex: '\.jar$'
+    snippet: 'java -jar'
+    operation: prepend
+
+  # like a function
+  - name: mkdircd
+    context: 'mkdircd'
+    abbr-regex: '.+'
+    snippet: 'mkdir -p $1 && cd $1'
+    operation: replace-all
+    evaluate: true
+
+  # global abbreviations
+  - name: '>/dev/null'
+    abbr: 'null'
+    snippet: '>/dev/null'
+    global: true
+
+  # global abbreviations with context
+  - name: git current branch
+    context: 'git'
+    abbr: 'B'
+    snippet: '$(git symbolic-ref --short HEAD)'
+    global: true
+    evaluate: true
+
+  # as one pleases
+  # You don't have to remember shortcut key.
+  - context: 'cd'
+    abbr: 'f'
+    snippet: $(fd --type d --hidden --no-ignore --exclude .git | fzf --preview 'exa -lha --time-style long-iso --color=always {}')
+    evaluate: true
+  - context: 'cd'
+    abbr: 'g'
+    snippet: $(fd --type d --hidden --follow '^.git$' ~ -x dirname | fzf --preview 'git -c color.status=always -C {} status')
+    evaluate: true
+  # choose commit interactively
+  - context: 'git'
+    abbr: 'i'
+    snippet: rebase -i $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always $(echo -- \"{}\" | grep -io '[0-9a-f]\{7,\}' | head -1)" | grep -io '[0-9a-f]\{7,\}' | head -1)
+    evaluate: true
