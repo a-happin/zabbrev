@@ -308,7 +308,7 @@ abbrevs:
   # choose commit interactively
   - context: 'git'
     abbr: 'i'
-    snippet: rebase -i $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always $(echo -- \"{}\" | grep -io '[0-9a-f]\{7,\}' | head -1)" | grep -io '[0-9a-f]\{7,\}' | head -1)
+    snippet: rebase -i $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always \$(printf '%s' {} | grep -io '[0-9a-f]\{7,\}')" | \grep -io '[0-9a-f]\{7,\}' | head -1)
     evaluate: true
 ```
 
