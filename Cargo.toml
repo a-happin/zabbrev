@@ -13,11 +13,11 @@ keywords = [
 edition = '2018'
 
 [dependencies]
-ansi_term = "0.12"
-dirs = "3.0"
-regex = "1.5"
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.8"
-shell-escape = "0.1"
-structopt = "0.3"
-thiserror = "1.0"
+ansi_term = "0.12.1"
+dirs = "4.0.0"
+regex = "1.5.4"
+serde = { version = "1.0.136", features = ["derive"] }
+serde_yaml = "0.8.23"
+shell-escape = "0.1.5"
+structopt = "0.3.26"
+thiserror = "1.0.30"
