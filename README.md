@@ -326,16 +326,8 @@ $ git rebase -i 544f368
 
 ## Installation
 
-### From prebuilt binary
-
-You can download a binary release [here](https://github.com/a-happin/zabbrev/releases).
-
-## zinit
-
-```zsh
-zinit blockf light-mode as"program" from"gh-r" for \
-    atload'eval "$(zabbrev init --bind-keys)"' \
-    a-happin/zabbrev
+```sh
+$ git clone https://github.com/a-happin/zabbrev.git && cd zabbrev && cargo install --path .
 ```
 
 ## Alternatives
