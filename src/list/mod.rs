@@ -1,4 +1,4 @@
-use crate::config::abbrev::Trigger;
+use crate::config::abbrev::Trigger::*;
 use crate::config::Config;
 use crate::opt::ListArgs;
 use shell_escape::escape;
@@ -12,8 +12,8 @@ pub fn run(args: &ListArgs) {
 fn list<W: io::Write>(_args: &ListArgs, config: &Config, out: &mut W) -> Result<(), io::Error> {
     for abbrev in &config.abbrevs {
         let abbr = match &abbrev.trigger {
-            Trigger::Abbr(abbr) => abbr,
-            Trigger::AbbrRegex(regex) => regex,
+            AbbrString(abbr) => abbr,
+            AbbrRegex(regex) => regex,
         };
         let snippet = escape(Cow::from(&abbrev.snippet));
 
@@ -39,7 +39,7 @@ mod tests {
                 abbr: c
                 snippet: commit
                 global: true
-                context: '^git '
+                context: 'git'
 
               - name: '>/dev/null'
                 abbr: 'null'

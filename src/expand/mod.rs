@@ -7,12 +7,19 @@ use std::borrow::Cow;
 #[derive(Debug, PartialEq)]
 pub struct ExpandResult<'a> {
     pub lbuffer: &'a str,
+    pub rbuffer: &'a str,
     pub startindex: usize,
     pub endindex: usize,
     pub last_arg: &'a str,
     pub snippet: &'a str,
     pub evaluate: bool,
-    pub rbuffer: &'a str,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct SplitResult<'a> {
+    pub context: &'a str,
+    pub last_arg: &'a str,
+    pub args_count_until_last: usize,
 }
 
 pub fn run(args: &ExpandArgs) {
@@ -55,22 +62,20 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
     let command_index = find_last_command_index(lbuffer);
     let command = lbuffer[command_index..].trim_start();
 
-    let (args_until_last, last_arg) = command
-        .rsplit_once(char::is_whitespace)
-        .unwrap_or(("", command));
+    let SplitResult {
+        context,
+        last_arg,
+        args_count_until_last,
+    } = split_args(command);
 
     if last_arg.is_empty() {
         return None;
     }
 
-    let (context, internal_args) = args_until_last
-        .split_once(char::is_whitespace)
-        .unwrap_or((args_until_last, ""));
-
     let abbrev = config
         .abbrevs
         .iter()
-        .find(|abbr| abbr.is_match(command, context, last_arg, internal_args.is_empty()))?;
+        .find(|abbr| abbr.is_match(context, args_count_until_last, last_arg))?;
 
     let (startindex, endindex) = match abbrev.operation {
         Operation::ReplaceSelf => {
@@ -97,12 +102,12 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
 
     Some(ExpandResult {
         lbuffer,
+        rbuffer,
         startindex,
         endindex,
         last_arg,
         snippet: &abbrev.snippet,
         evaluate: abbrev.evaluate,
-        rbuffer,
     })
 }
 
@@ -178,12 +183,12 @@ mod tests {
                 rbuffer: "",
                 expected: Some(ExpandResult {
                     lbuffer: "g",
+                    rbuffer: "",
                     startindex: 0,
                     endindex: 1,
                     last_arg: "g",
                     snippet: "git",
                     evaluate: false,
-                    rbuffer: "",
                 }),
             },
             Scenario {
@@ -192,12 +197,12 @@ mod tests {
                 rbuffer: " --pager=never",
                 expected: Some(ExpandResult {
                     lbuffer: "g",
+                    rbuffer: " --pager=never",
                     startindex: 0,
                     endindex: 1,
                     last_arg: "g",
                     snippet: "git",
                     evaluate: false,
-                    rbuffer: " --pager=never",
                 }),
             },
             Scenario {
@@ -206,12 +211,12 @@ mod tests {
                 rbuffer: "",
                 expected: Some(ExpandResult {
                     lbuffer: "echo hello; g",
+                    rbuffer: "",
                     startindex: 12,
                     endindex: 13,
                     last_arg: "g",
                     snippet: "git",
                     evaluate: false,
-                    rbuffer: "",
                 }),
             },
             Scenario {
@@ -220,12 +225,12 @@ mod tests {
                 rbuffer: "",
                 expected: Some(ExpandResult {
                     lbuffer: "echo hello null",
+                    rbuffer: "",
                     startindex: 11,
                     endindex: 15,
                     last_arg: "null",
                     snippet: ">/dev/null",
                     evaluate: false,
-                    rbuffer: "",
                 }),
             },
             Scenario {
@@ -234,12 +239,12 @@ mod tests {
                 rbuffer: " -m hello",
                 expected: Some(ExpandResult {
                     lbuffer: "echo hello; git c",
+                    rbuffer: " -m hello",
                     startindex: 16,
                     endindex: 17,
                     last_arg: "c",
                     snippet: "commit",
                     evaluate: false,
-                    rbuffer: " -m hello",
                 }),
             },
             Scenario {
@@ -260,12 +265,12 @@ mod tests {
                 rbuffer: "",
                 expected: Some(ExpandResult {
                     lbuffer: "home",
+                    rbuffer: "",
                     startindex: 0,
                     endindex: 4,
                     last_arg: "home",
                     snippet: "$HOME",
                     evaluate: true,
-                    rbuffer: "",
                 }),
             },
             Scenario {
@@ -274,12 +279,12 @@ mod tests {
                 rbuffer: "",
                 expected: Some(ExpandResult {
                     lbuffer: "rm",
+                    rbuffer: "",
                     startindex: 2,
                     endindex: 2,
                     last_arg: "rm",
                     snippet: "-i",
                     evaluate: false,
-                    rbuffer: "",
                 }),
             },
             Scenario {
@@ -288,12 +293,12 @@ mod tests {
                 rbuffer: "",
                 expected: Some(ExpandResult {
                     lbuffer: "extract test.tar",
+                    rbuffer: "",
                     startindex: 0,
                     endindex: 7,
                     last_arg: "test.tar",
                     snippet: "tar -xvf",
                     evaluate: false,
-                    rbuffer: "",
                 }),
             },
             Scenario {
@@ -302,12 +307,12 @@ mod tests {
                 rbuffer: "",
                 expected: Some(ExpandResult {
                     lbuffer: "test.java",
+                    rbuffer: "",
                     startindex: 0,
                     endindex: 0,
                     last_arg: "test.java",
                     snippet: "java -jar",
                     evaluate: false,
-                    rbuffer: "",
                 }),
             },
         ];
@@ -337,4 +342,277 @@ fn test_find_last_command_index() {
     assert_eq!(find_last_command_index("echo hello; git commit"), 11);
     assert_eq!(find_last_command_index("echo hello && git commit"), 13);
     assert_eq!(find_last_command_index("seq 10 | tail -3 | cat"), 18);
+}
+
+enum SpliterState {
+    Delimiter,
+    Backslash,
+    InWord { is_escaped: bool },
+    InQuot { quot: char, is_escaped: bool },
+}
+impl Default for SpliterState {
+    fn default() -> Self {
+        SpliterState::Delimiter
+    }
+}
+
+fn split_args<'a>(command: &'a str) -> SplitResult {
+    use SpliterState::*;
+
+    let mut start = 0;
+    let mut args_count_until_last = 0;
+    let mut range_of_context = None;
+    let mut state = SpliterState::default();
+    let mut ite = command.char_indices();
+
+    loop {
+        match ite.next() {
+            Some((idx, c)) => {
+                state = match state {
+                    Delimiter => match c {
+                        '\\' => {
+                            start = idx;
+                            Backslash
+                        }
+                        '\'' | '\"' => {
+                            start = idx;
+                            InQuot {
+                                quot: c,
+                                is_escaped: false,
+                            }
+                        }
+                        ' ' | '\t' | '\n' => Delimiter,
+                        _ => {
+                            start = idx;
+                            InWord { is_escaped: false }
+                        }
+                    },
+                    InWord { is_escaped: false } => match c {
+                        '\\' => InWord { is_escaped: true },
+                        '\'' | '\"' => InQuot {
+                            quot: c,
+                            is_escaped: false,
+                        },
+                        ' ' | '\t' | '\n' => {
+                            args_count_until_last += 1;
+                            if range_of_context.is_none() {
+                                range_of_context = Some(start..idx);
+                            }
+                            Delimiter
+                        }
+                        _ => InWord { is_escaped: false },
+                    },
+                    InQuot {
+                        quot,
+                        is_escaped: false,
+                    } => match c {
+                        _ if c == quot => InWord { is_escaped: false },
+                        '\\' => InQuot {
+                            quot,
+                            is_escaped: true,
+                        },
+                        _ => InQuot {
+                            quot,
+                            is_escaped: false,
+                        },
+                    },
+                    Backslash => match c {
+                        '\n' => Delimiter,
+                        _ => InWord { is_escaped: false },
+                    },
+                    InWord { is_escaped: true } => InWord { is_escaped: false },
+                    InQuot {
+                        quot,
+                        is_escaped: true,
+                    } => InQuot {
+                        quot,
+                        is_escaped: false,
+                    },
+                }
+            }
+            None => {
+                let last_arg = match state {
+                    Delimiter => &command[command.len()..],
+                    _ => &command[start..],
+                };
+                return SplitResult {
+                    context: &command[range_of_context.unwrap_or(0..0)],
+                    last_arg,
+                    args_count_until_last,
+                };
+            }
+        }
+    }
+}
+
+#[test]
+fn test_split_args() {
+    assert_eq!(
+        split_args(""),
+        SplitResult {
+            context: "",
+            last_arg: "",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args(" "),
+        SplitResult {
+            context: "",
+            last_arg: "",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args(":"),
+        SplitResult {
+            context: "",
+            last_arg: ":",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args("\\"),
+        SplitResult {
+            context: "",
+            last_arg: "\\",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args("\'"),
+        SplitResult {
+            context: "",
+            last_arg: "\'",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args("\""),
+        SplitResult {
+            context: "",
+            last_arg: "\"",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args(": "),
+        SplitResult {
+            context: ":",
+            last_arg: "",
+            args_count_until_last: 1
+        }
+    );
+    assert_eq!(
+        split_args("\\ "),
+        SplitResult {
+            context: "",
+            last_arg: "\\ ",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args("\' "),
+        SplitResult {
+            context: "",
+            last_arg: "\' ",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args("\" "),
+        SplitResult {
+            context: "",
+            last_arg: "\" ",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args("git"),
+        SplitResult {
+            context: "",
+            last_arg: "git",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args("git commit"),
+        SplitResult {
+            context: "git",
+            last_arg: "commit",
+            args_count_until_last: 1
+        }
+    );
+    assert_eq!(
+        split_args("git  commit"),
+        SplitResult {
+            context: "git",
+            last_arg: "commit",
+            args_count_until_last: 1
+        }
+    );
+    assert_eq!(
+        split_args(" git  commit"),
+        SplitResult {
+            context: "git",
+            last_arg: "commit",
+            args_count_until_last: 1
+        }
+    );
+    assert_eq!(
+        split_args(" git  commit "),
+        SplitResult {
+            context: "git",
+            last_arg: "",
+            args_count_until_last: 2
+        }
+    );
+    assert_eq!(
+        split_args("git\\ commit"),
+        SplitResult {
+            context: "",
+            last_arg: "git\\ commit",
+            args_count_until_last: 0
+        }
+    );
+    assert_eq!(
+        split_args("git 'a file.txt'"),
+        SplitResult {
+            context: "git",
+            last_arg: "'a file.txt'",
+            args_count_until_last: 1
+        }
+    );
+    assert_eq!(
+        split_args("git ''a file.txt'"),
+        SplitResult {
+            context: "git",
+            last_arg: "file.txt'",
+            args_count_until_last: 2
+        }
+    );
+    assert_eq!(
+        split_args("git '''a file.txt'"),
+        SplitResult {
+            context: "git",
+            last_arg: "'''a file.txt'",
+            args_count_until_last: 1
+        }
+    );
+    assert_eq!(
+        split_args("git 'a \\' file.txt'"),
+        SplitResult {
+            context: "git",
+            last_arg: "'a \\' file.txt'",
+            args_count_until_last: 1
+        }
+    );
+    assert_eq!(
+        split_args("git 'a \\\\' file.txt'\\"),
+        SplitResult {
+            context: "git",
+            last_arg: "file.txt'\\",
+            args_count_until_last: 2
+        }
+    );
 }
