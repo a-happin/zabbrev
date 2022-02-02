@@ -344,25 +344,25 @@ fn test_find_last_command_index() {
     assert_eq!(find_last_command_index("seq 10 | tail -3 | cat"), 18);
 }
 
-enum SpliterState {
+enum SplitState {
     Delimiter,
     Backslash,
     InWord { is_escaped: bool },
     InQuot { quot: char, is_escaped: bool },
 }
-impl Default for SpliterState {
+impl Default for SplitState {
     fn default() -> Self {
-        SpliterState::Delimiter
+        SplitState::Delimiter
     }
 }
 
 fn split_args<'a>(command: &'a str) -> SplitResult {
-    use SpliterState::*;
+    use SplitState::*;
 
     let mut start = 0;
     let mut args_count_until_last = 0;
     let mut range_of_context = None;
-    let mut state = SpliterState::default();
+    let mut state = SplitState::default();
     let mut ite = command.char_indices();
 
     loop {
