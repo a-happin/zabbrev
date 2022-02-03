@@ -70,12 +70,12 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         return None;
     }
 
-    let abbrev = config
+    let match_result = config
         .abbrevs
         .iter()
-        .find(|abbr| abbr.is_match(&args_until_last, last_arg))?;
+        .flat_map(|abbr| abbr.matches(&args_until_last, last_arg)).next()?;
 
-    let (startindex, endindex) = match abbrev.operation {
+    let (startindex, endindex) = match match_result.abbrev.operation {
         Operation::ReplaceSelf => {
             let index = lbuffer.len() - last_arg.len();
             (index, lbuffer.len())
@@ -105,8 +105,8 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         startindex,
         endindex,
         last_arg,
-        snippet: &abbrev.snippet,
-        evaluate: abbrev.evaluate,
+        snippet: &match_result.abbrev.snippet,
+        evaluate: match_result.abbrev.evaluate,
     })
 }
 

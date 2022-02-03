@@ -13,6 +13,7 @@ fn list<W: io::Write>(_args: &ListArgs, config: &Config, out: &mut W) -> Result<
     for abbrev in &config.abbrevs {
         let abbr = match &abbrev.trigger {
             AbbrString(abbr) => abbr,
+            AbbrSuffix(suffix) => suffix,
             AbbrRegex(regex) => regex,
         };
         let snippet = escape(Cow::from(&abbrev.snippet));
