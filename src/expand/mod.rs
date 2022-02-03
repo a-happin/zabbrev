@@ -8,10 +8,12 @@ use std::borrow::Cow;
 pub struct ExpandResult<'a> {
     pub lbuffer: &'a str,
     pub rbuffer: &'a str,
-    pub startindex: usize,
-    pub endindex: usize,
     pub last_arg: &'a str,
     pub snippet: &'a str,
+    pub start_index_of_replacement: usize,
+    pub end_index_of_replacement: usize,
+    pub is_append: bool,
+    pub is_prepend: bool,
     pub evaluate: bool,
 }
 
@@ -23,22 +25,16 @@ pub struct SplitResult<'a> {
 
 pub fn run(args: &ExpandArgs) {
     if let Some(result) = expand(args, &Config::load_or_exit()) {
-        let lbuffer_prev = escape(Cow::from(&result.lbuffer[..result.startindex]));
-        let lbuffer_post = escape(Cow::from(&result.lbuffer[result.endindex..]));
+        let lbuffer_prev = escape(Cow::from(
+            &result.lbuffer[..result.start_index_of_replacement],
+        ));
+        let lbuffer_post = escape(Cow::from(
+            &result.lbuffer[result.end_index_of_replacement..],
+        ));
         let last_arg = escape(Cow::from(result.last_arg));
         let snippet = escape(Cow::from(result.snippet));
         let rbuffer = escape(Cow::from(result.rbuffer));
         let evaluate = if result.evaluate { "(e)" } else { "" };
-
-        let (joint_append, joint_prepend) = if result.startindex == result.endindex {
-            if result.startindex == result.lbuffer.len() {
-                (" ", "")
-            } else {
-                ("", " ")
-            }
-        } else {
-            ("", "")
-        };
 
         println!(
             r#"local snippet={};set -- {};snippet="${{{}snippet}}";[[ $? -eq 0 ]] && {{ LBUFFER={}"{}${{(pj: :)${{(@f)snippet}}}}{}"{};RBUFFER={};}};"#,
@@ -46,8 +42,8 @@ pub fn run(args: &ExpandArgs) {
             last_arg,
             evaluate,
             lbuffer_prev,
-            joint_append,
-            joint_prepend,
+            if result.is_append { " " } else { "" },
+            if result.is_prepend { " " } else { "" },
             lbuffer_post,
             rbuffer
         );
@@ -76,37 +72,59 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         .flat_map(|abbr| abbr.matches(&args_until_last, last_arg))
         .next()?;
 
-    let (startindex, endindex) = match match_result.abbrev.operation {
-        Operation::ReplaceSelf => {
-            let index = lbuffer.len() - last_arg.len();
-            (index, lbuffer.len())
-        }
-        Operation::ReplaceCommand => {
-            let index = lbuffer.len() - command.len();
-            let len = args_until_last.first().map(|&x| x.len()).unwrap_or(0);
-            (index, index + len)
-        }
-        Operation::ReplaceAll => {
-            let index = lbuffer.len() - command.len();
-            (index, lbuffer.len())
-        }
-        Operation::Append => {
-            let index = lbuffer.len();
-            (index, index)
-        }
-        Operation::Prepend => {
-            let index = lbuffer.len() - command.len();
-            (index, index)
-        }
-    };
+    let (start_index_of_replacement, end_index_of_replacement, is_append, is_prepend) =
+        match match_result.abbrev.operation {
+            Operation::ReplaceSelf => {
+                let index = lbuffer.len() - last_arg.len();
+                (index, lbuffer.len(), false, false)
+            }
+            Operation::ReplaceFirst => {
+                let index = lbuffer.len() - command.len();
+                let len = args_until_last
+                    .first()
+                    .map(|&x| x.len())
+                    .unwrap_or(last_arg.len());
+                (index, index + len, false, false)
+            }
+            Operation::ReplaceContext => {
+                let index = lbuffer.len() - command.len();
+                match match_result.context_size {
+                    0 => (index, index, false, true),
+                    context_size => {
+                        let last_arg_of_context = args_until_last[context_size - 1];
+                        (
+                            index,
+                            unsafe { get_subslice_index_unchecked(lbuffer, last_arg_of_context) }
+                                + last_arg_of_context.len(),
+                            false,
+                            false,
+                        )
+                    }
+                }
+            }
+            Operation::ReplaceAll => {
+                let index = lbuffer.len() - command.len();
+                (index, lbuffer.len(), false, false)
+            }
+            Operation::Append => {
+                let index = lbuffer.len();
+                (index, index, true, false)
+            }
+            Operation::Prepend => {
+                let index = lbuffer.len() - command.len();
+                (index, index, false, true)
+            }
+        };
 
     Some(ExpandResult {
         lbuffer,
         rbuffer,
-        startindex,
-        endindex,
+        start_index_of_replacement,
+        end_index_of_replacement,
         last_arg,
         snippet: &match_result.abbrev.snippet,
+        is_append,
+        is_prepend,
         evaluate: match_result.abbrev.evaluate,
     })
 }
@@ -148,12 +166,25 @@ mod tests {
                 context: 'extract'
                 abbr-regex: '\.tar$'
                 snippet: 'tar -xvf'
-                operation: replace-command
+                operation: replace-first
+
+              - name: 'function?'
+                context: 'mkdircd'
+                abbr-regex: '.+'
+                snippet: 'mkdir -p $1 && cd $1'
+                operation: replace-all
+                evaluate: true
 
               - name: associated command
                 abbr-regex: '\.java$'
                 snippet: 'java -jar'
                 operation: prepend
+
+              - name: context replacement
+                context: 'a b'
+                abbr: c
+                snippet: 'A'
+                operation: replace-context
             ",
         )
         .unwrap()
@@ -184,8 +215,10 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "g",
                     rbuffer: "",
-                    startindex: 0,
-                    endindex: 1,
+                    start_index_of_replacement: 0,
+                    end_index_of_replacement: 1,
+                    is_append: false,
+                    is_prepend: false,
                     last_arg: "g",
                     snippet: "git",
                     evaluate: false,
@@ -198,8 +231,10 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "g",
                     rbuffer: " --pager=never",
-                    startindex: 0,
-                    endindex: 1,
+                    start_index_of_replacement: 0,
+                    end_index_of_replacement: 1,
+                    is_append: false,
+                    is_prepend: false,
                     last_arg: "g",
                     snippet: "git",
                     evaluate: false,
@@ -212,8 +247,10 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "echo hello; g",
                     rbuffer: "",
-                    startindex: 12,
-                    endindex: 13,
+                    start_index_of_replacement: 12,
+                    end_index_of_replacement: 13,
+                    is_append: false,
+                    is_prepend: false,
                     last_arg: "g",
                     snippet: "git",
                     evaluate: false,
@@ -226,8 +263,10 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "echo hello null",
                     rbuffer: "",
-                    startindex: 11,
-                    endindex: 15,
+                    start_index_of_replacement: 11,
+                    end_index_of_replacement: 15,
+                    is_append: false,
+                    is_prepend: false,
                     last_arg: "null",
                     snippet: ">/dev/null",
                     evaluate: false,
@@ -240,8 +279,10 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "echo hello; git c",
                     rbuffer: " -m hello",
-                    startindex: 16,
-                    endindex: 17,
+                    start_index_of_replacement: 16,
+                    end_index_of_replacement: 17,
+                    is_append: false,
+                    is_prepend: false,
                     last_arg: "c",
                     snippet: "commit",
                     evaluate: false,
@@ -266,8 +307,10 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "home",
                     rbuffer: "",
-                    startindex: 0,
-                    endindex: 4,
+                    start_index_of_replacement: 0,
+                    end_index_of_replacement: 4,
+                    is_append: false,
+                    is_prepend: false,
                     last_arg: "home",
                     snippet: "$HOME",
                     evaluate: true,
@@ -280,8 +323,10 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "rm",
                     rbuffer: "",
-                    startindex: 2,
-                    endindex: 2,
+                    start_index_of_replacement: 2,
+                    end_index_of_replacement: 2,
+                    is_append: true,
+                    is_prepend: false,
                     last_arg: "rm",
                     snippet: "-i",
                     evaluate: false,
@@ -294,11 +339,29 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "extract test.tar",
                     rbuffer: "",
-                    startindex: 0,
-                    endindex: 7,
+                    start_index_of_replacement: 0,
+                    end_index_of_replacement: 7,
+                    is_append: false,
+                    is_prepend: false,
                     last_arg: "test.tar",
                     snippet: "tar -xvf",
                     evaluate: false,
+                }),
+            },
+            Scenario {
+                testname: "like a function abbr",
+                lbuffer: "mkdircd foo/bar",
+                rbuffer: "",
+                expected: Some(ExpandResult {
+                    lbuffer: "mkdircd foo/bar",
+                    rbuffer: "",
+                    start_index_of_replacement: 0,
+                    end_index_of_replacement: 15,
+                    is_append: false,
+                    is_prepend: false,
+                    last_arg: "foo/bar",
+                    snippet: "mkdir -p $1 && cd $1",
+                    evaluate: true,
                 }),
             },
             Scenario {
@@ -308,10 +371,28 @@ mod tests {
                 expected: Some(ExpandResult {
                     lbuffer: "test.java",
                     rbuffer: "",
-                    startindex: 0,
-                    endindex: 0,
+                    start_index_of_replacement: 0,
+                    end_index_of_replacement: 0,
+                    is_append: false,
+                    is_prepend: true,
                     last_arg: "test.java",
                     snippet: "java -jar",
+                    evaluate: false,
+                }),
+            },
+            Scenario {
+                testname: "context replacement",
+                lbuffer: " a b c",
+                rbuffer: "",
+                expected: Some(ExpandResult {
+                    lbuffer: " a b c",
+                    rbuffer: "",
+                    start_index_of_replacement: 1,
+                    end_index_of_replacement: 4,
+                    is_append: false,
+                    is_prepend: false,
+                    last_arg: "c",
+                    snippet: "A",
                     evaluate: false,
                 }),
             },
@@ -589,4 +670,22 @@ fn test_split_args() {
             last_arg: "file.txt'\\",
         }
     );
+}
+
+unsafe fn get_subslice_index_unchecked<'a>(slice: &'a str, subslice: &'a str) -> usize {
+    use std::convert::TryInto;
+    subslice
+        .as_ptr()
+        .offset_from(slice.as_ptr())
+        .try_into()
+        .unwrap()
+}
+
+#[test]
+fn test_get_subslice_index_unchecked() {
+    let s = "abcdefg";
+    for i in 0..s.len() {
+        let s2 = &s[i..];
+        assert_eq!(unsafe { get_subslice_index_unchecked(s, s2) }, i);
+    }
 }

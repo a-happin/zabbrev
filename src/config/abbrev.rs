@@ -25,8 +25,10 @@ pub enum Trigger {
 pub enum Operation {
     #[serde(rename = "replace-self")]
     ReplaceSelf,
-    #[serde(rename = "replace-command")]
-    ReplaceCommand,
+    #[serde(rename = "replace-first")]
+    ReplaceFirst,
+    #[serde(rename = "replace-context")]
+    ReplaceContext,
     #[serde(rename = "replace-all")]
     ReplaceAll,
     #[serde(rename = "append")]
