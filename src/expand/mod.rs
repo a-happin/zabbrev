@@ -17,9 +17,8 @@ pub struct ExpandResult<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct SplitResult<'a> {
-    pub context: &'a str,
+    pub args_until_last: Vec<&'a str>,
     pub last_arg: &'a str,
-    pub args_count_until_last: usize,
 }
 
 pub fn run(args: &ExpandArgs) {
@@ -63,9 +62,8 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
     let command = lbuffer[command_index..].trim_start();
 
     let SplitResult {
-        context,
+        args_until_last,
         last_arg,
-        args_count_until_last,
     } = split_args(command);
 
     if last_arg.is_empty() {
@@ -75,7 +73,7 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
     let abbrev = config
         .abbrevs
         .iter()
-        .find(|abbr| abbr.is_match(context, args_count_until_last, last_arg))?;
+        .find(|abbr| abbr.is_match(&args_until_last, last_arg))?;
 
     let (startindex, endindex) = match abbrev.operation {
         Operation::ReplaceSelf => {
@@ -84,7 +82,8 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         }
         Operation::ReplaceCommand => {
             let index = lbuffer.len() - command.len();
-            (index, index + context.len())
+            let len = args_until_last.first().map(|&x| x.len()).unwrap_or(0);
+            (index, index + len)
         }
         Operation::ReplaceAll => {
             let index = lbuffer.len() - command.len();
@@ -360,8 +359,7 @@ fn split_args<'a>(command: &'a str) -> SplitResult {
     use SplitState::*;
 
     let mut start = 0;
-    let mut args_count_until_last = 0;
-    let mut range_of_context = None;
+    let mut args_until_last = Vec::new();
     let mut state = SplitState::default();
     let mut ite = command.char_indices();
 
@@ -394,10 +392,7 @@ fn split_args<'a>(command: &'a str) -> SplitResult {
                             is_escaped: false,
                         },
                         ' ' | '\t' | '\n' => {
-                            args_count_until_last += 1;
-                            if range_of_context.is_none() {
-                                range_of_context = Some(start..idx);
-                            }
+                            args_until_last.push(&command[start..idx]);
                             Delimiter
                         }
                         _ => InWord { is_escaped: false },
@@ -436,9 +431,8 @@ fn split_args<'a>(command: &'a str) -> SplitResult {
                     _ => &command[start..],
                 };
                 return SplitResult {
-                    context: &command[range_of_context.unwrap_or(0..0)],
+                    args_until_last,
                     last_arg,
-                    args_count_until_last,
                 };
             }
         }
@@ -450,169 +444,148 @@ fn test_split_args() {
     assert_eq!(
         split_args(""),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: "",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args(" "),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: "",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args(":"),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: ":",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args("\\"),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: "\\",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args("\'"),
         SplitResult {
-            context: "",
             last_arg: "\'",
-            args_count_until_last: 0
+            args_until_last: vec![],
         }
     );
     assert_eq!(
         split_args("\""),
         SplitResult {
-            context: "",
             last_arg: "\"",
-            args_count_until_last: 0
+            args_until_last: vec![],
         }
     );
     assert_eq!(
         split_args(": "),
         SplitResult {
-            context: ":",
+            args_until_last: vec![":"],
             last_arg: "",
-            args_count_until_last: 1
         }
     );
     assert_eq!(
         split_args("\\ "),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: "\\ ",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args("\' "),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: "\' ",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args("\" "),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: "\" ",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args("git"),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: "git",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args("git commit"),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git"],
             last_arg: "commit",
-            args_count_until_last: 1
         }
     );
     assert_eq!(
         split_args("git  commit"),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git"],
             last_arg: "commit",
-            args_count_until_last: 1
         }
     );
     assert_eq!(
         split_args(" git  commit"),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git"],
             last_arg: "commit",
-            args_count_until_last: 1
         }
     );
     assert_eq!(
         split_args(" git  commit "),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git", "commit"],
             last_arg: "",
-            args_count_until_last: 2
         }
     );
     assert_eq!(
         split_args("git\\ commit"),
         SplitResult {
-            context: "",
+            args_until_last: vec![],
             last_arg: "git\\ commit",
-            args_count_until_last: 0
         }
     );
     assert_eq!(
         split_args("git 'a file.txt'"),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git"],
             last_arg: "'a file.txt'",
-            args_count_until_last: 1
         }
     );
     assert_eq!(
         split_args("git ''a file.txt'"),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git", "''a"],
             last_arg: "file.txt'",
-            args_count_until_last: 2
         }
     );
     assert_eq!(
         split_args("git '''a file.txt'"),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git"],
             last_arg: "'''a file.txt'",
-            args_count_until_last: 1
         }
     );
     assert_eq!(
         split_args("git 'a \\' file.txt'"),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git"],
             last_arg: "'a \\' file.txt'",
-            args_count_until_last: 1
         }
     );
     assert_eq!(
         split_args("git 'a \\\\' file.txt'\\"),
         SplitResult {
-            context: "git",
+            args_until_last: vec!["git", "'a \\\\'"],
             last_arg: "file.txt'\\",
-            args_count_until_last: 2
         }
     );
 }

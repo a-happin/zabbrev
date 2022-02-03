@@ -58,25 +58,43 @@ pub struct Abbrev {
 }
 
 impl Context {
-    pub fn is_match(&self, context: &str, args_count_until_last: usize) -> bool {
-        if self.global {
-            if self.context == "" {
-                true
-            } else {
-                self.context == context
-            }
+    pub fn matches(&self, args_until_last: &[&str]) -> bool {
+        let mut context = self.context.trim_start();
+        if context.is_empty() {
+            self.global || args_until_last.len() == 0
         } else {
-            if self.context == "" {
-                args_count_until_last == 0
-            } else {
-                args_count_until_last == 1 && self.context == context
+            let mut ite = args_until_last.iter();
+            loop {
+                match ite.next() {
+                    Some(&arg) => {
+                        context = match context.strip_prefix(arg) {
+                            Some(context) => {
+                                if context.is_empty() || context.starts_with(char::is_whitespace) {
+                                    context.trim_start()
+                                } else {
+                                    return false; // context mismatch (wrong context)
+                                }
+                            }
+                            None => {
+                                return false; // context mismatch (wrong context)
+                            }
+                        }
+                    }
+                    None => {
+                        return false; // context mismatch (too few arguments)
+                    }
+                }
+                if context.is_empty() {
+                    break;
+                }
             }
+            self.global || ite.next() == None
         }
     }
 }
 
 impl Trigger {
-    pub fn is_match(&self, last_arg: &str) -> Result<bool, regex::Error> {
+    pub fn matches(&self, last_arg: &str) -> Result<bool, regex::Error> {
         match self {
             Self::AbbrString(ref abbr) => Ok(last_arg == abbr),
             Self::AbbrRegex(ref regex) => {
@@ -88,9 +106,9 @@ impl Trigger {
 }
 
 impl Abbrev {
-    pub fn is_match(&self, context: &str, args_count_until_last: usize, last_arg: &str) -> bool {
-        self.context.is_match(context, args_count_until_last)
-            && self.trigger.is_match(last_arg).unwrap_or_else(|err| {
+    pub fn is_match(&self, args_until_last: &[&str], last_arg: &str) -> bool {
+        self.context.matches(args_until_last)
+            && self.trigger.matches(last_arg).unwrap_or_else(|err| {
                 let name = self.name.as_ref().unwrap_or(&self.snippet);
                 let error_message = format!("invalid regex in abbrev '{}': {}", name, err);
                 let error_style = Color::Red.normal();
@@ -106,142 +124,225 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_is_match_context() {
+    fn test_matches_context() {
         struct Scenario {
             pub testname: &'static str,
             pub abbr_context: Context,
-            pub context: &'static str,
-            pub args_count_until_last: usize,
+            pub args_until_last: Vec<&'static str>,
             pub expected: bool,
         }
         let scenarios = &[
             Scenario {
-                testname: "should match empty context, non-global, no args_until_last",
+                testname: r#"should match if empty context, non-global, args == ""#,
                 abbr_context: Context {
                     context: String::new(),
                     global: false,
                 },
-                context: "",
-                args_count_until_last: 0,
+                args_until_last: vec![],
                 expected: true,
             },
             Scenario {
-                testname: "should not match empty context, non-global, one or more args_until_last",
+                testname: r#"should not match if empty context, non-global, args == "a""#,
                 abbr_context: Context {
                     context: String::new(),
                     global: false,
                 },
-                context: "a",
-                args_count_until_last: 1,
+                args_until_last: vec!["a"],
                 expected: false,
             },
             Scenario {
-                testname: "should match empty context, global, no args_until_last",
+                testname: r#"should match if empty context, global, args == """#,
                 abbr_context: Context {
                     context: String::new(),
                     global: true,
                 },
-                context: "",
-                args_count_until_last: 0,
+                args_until_last: vec![],
                 expected: true,
             },
             Scenario {
-                testname: "should match empty context, global, one or more args_until_last",
+                testname: r#"should match if empty context, global, args == "a""#,
                 abbr_context: Context {
                     context: String::new(),
                     global: true,
                 },
-                context: "a",
-                args_count_until_last: 1,
+                args_until_last: vec!["a"],
                 expected: true,
             },
             Scenario {
-                testname: "should not match with context, non-global, no args_until_last",
+                testname: r#"should not match if context == "git", non-global, args == """#,
                 abbr_context: Context {
                     context: "git".to_string(),
                     global: false,
                 },
-                context: "",
-                args_count_until_last: 0,
+                args_until_last: vec![],
                 expected: false,
             },
             Scenario {
-                testname:
-                    "should not match with context, non-global, args_until_last with wrong context",
+                testname: r#"should not match if context == "git", non-global, args == "a""#,
                 abbr_context: Context {
                     context: "git".to_string(),
                     global: false,
                 },
-                context: "a",
-                args_count_until_last: 1,
+                args_until_last: vec!["a"],
                 expected: false,
             },
             Scenario {
-                testname: "should match with context, non-global",
+                testname: r#"should match if context == "git", non-global, args =="git""#,
                 abbr_context: Context {
                     context: "git".to_string(),
                     global: false,
                 },
-                context: "git",
-                args_count_until_last: 1,
+                args_until_last: vec!["git"],
                 expected: true,
             },
             Scenario {
-                testname:
-                    "should not match with context, non-global, more than one args_until_last",
+                testname: r#"should not match if context == "git", non-global, args == "git commit""#,
                 abbr_context: Context {
                     context: "git".to_string(),
                     global: false,
                 },
-                context: "git",
-                args_count_until_last: 2,
+                args_until_last: vec!["git", "commit"],
                 expected: false,
             },
             Scenario {
-                testname: "should not match with context, global, no args_until_last",
+                testname: r#"should not match if context == "git", global, args == """#,
                 abbr_context: Context {
                     context: "git".to_string(),
                     global: true,
                 },
-                context: "",
-                args_count_until_last: 0,
+                args_until_last: vec![],
                 expected: false,
             },
             Scenario {
-                testname:
-                    "should not match with context, global, args_until_last with wrong context",
+                testname: r#"should not match if context == "git", global, args == "a""#,
                 abbr_context: Context {
                     context: "git".to_string(),
                     global: true,
                 },
-                context: "a",
-                args_count_until_last: 1,
+                args_until_last: vec!["a"],
                 expected: false,
             },
             Scenario {
-                testname: "should match with context, global",
+                testname: r#"should match if context == "git", global, args == "git""#,
                 abbr_context: Context {
                     context: "git".to_string(),
                     global: true,
                 },
-                context: "git",
-                args_count_until_last: 1,
+                args_until_last: vec!["git"],
                 expected: true,
             },
             Scenario {
-                testname: "should match with context, global, more than one args_until_last",
+                testname: r#"should match if context == "git", global, args == "git commit""#,
                 abbr_context: Context {
                     context: "git".to_string(),
                     global: true,
                 },
-                context: "git",
-                args_count_until_last: 2,
+                args_until_last: vec!["git", "commit"],
+                expected: true,
+            },
+            Scenario {
+                testname: r#"should match if context == "git", global, args == "echo git""#,
+                abbr_context: Context {
+                    context: "git".to_string(),
+                    global: true,
+                },
+                args_until_last: vec!["echo", "git"],
+                expected: false,
+            },
+            Scenario {
+                testname: r#"should match if context == "git commit", non-global, args == "git commit""#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: false,
+                },
+                args_until_last: vec!["git", "commit"],
+                expected: true,
+            },
+            Scenario {
+                testname: r#"should match if context == "  git  commit  ", non-global, args == "git commit""#,
+                abbr_context: Context {
+                    context: "  git  commit  ".to_string(),
+                    global: false,
+                },
+                args_until_last: vec!["git", "commit"],
+                expected: true,
+            },
+            Scenario {
+                testname: r#"should not match if context == "git commit", non-global, args == "git""#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: false,
+                },
+                args_until_last: vec!["git"],
+                expected: false,
+            },
+            Scenario {
+                testname: r#"should not match if context == "git commit", non-global, args == """#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: false,
+                },
+                args_until_last: vec![""],
+                expected: false,
+            },
+            Scenario {
+                testname: r#"should not match if context == "git commit", non-global, args == "git commit -m""#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: false,
+                },
+                args_until_last: vec!["git", "commit", "-m"],
+                expected: false,
+            },
+            Scenario {
+                testname: r#"should not match if context == "git commit", non-global, args == "git commita""#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: false,
+                },
+                args_until_last: vec!["git", "commita"],
+                expected: false,
+            },
+            Scenario {
+                testname: r#"should not match if context == "git commit", non-global, args == "git com""#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: false,
+                },
+                args_until_last: vec!["git", "com"],
+                expected: false,
+            },
+            Scenario {
+                testname: r#"should not match if context == "git commit", global, args == "git""#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: true,
+                },
+                args_until_last: vec!["git"],
+                expected: false,
+            },
+            Scenario {
+                testname: r#"should match if context == "git commit", global, args == "git commit""#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: true,
+                },
+                args_until_last: vec!["git", "commit"],
+                expected: true,
+            },
+            Scenario {
+                testname: r#"should match if context == "git commit", global, args == "git commit -m""#,
+                abbr_context: Context {
+                    context: "git commit".to_string(),
+                    global: true,
+                },
+                args_until_last: vec!["git", "commit", "-m"],
                 expected: true,
             },
         ];
         for s in scenarios {
             assert_eq!(
-                s.abbr_context.is_match(&s.context, s.args_count_until_last),
+                s.abbr_context.matches(&s.args_until_last),
                 s.expected,
                 "{}",
                 s.testname
@@ -285,12 +386,7 @@ mod tests {
             },
         ];
         for s in scenarios {
-            assert_eq!(
-                s.trigger.is_match(&s.last_arg),
-                s.expected,
-                "{}",
-                s.testname
-            );
+            assert_eq!(s.trigger.matches(&s.last_arg), s.expected, "{}", s.testname);
         }
     }
 }
