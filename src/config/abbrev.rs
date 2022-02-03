@@ -65,7 +65,7 @@ struct ContextMatchResult {
 }
 
 #[derive(Debug)]
-pub struct MatchResult <'a> {
+pub struct MatchResult<'a> {
     pub abbrev: &'a Abbrev,
     pub context_size: usize,
 }
@@ -76,21 +76,18 @@ impl Context {
         let mut i = 0;
         while !context.is_empty() {
             let &arg = args_until_last.get(i)?; // return because of too few arguments
-            context = context.strip_prefix(arg).and_then (|context|
+            context = context.strip_prefix(arg).and_then(|context| {
                 if context.is_empty() || context.starts_with(char::is_whitespace) {
                     Some(context.trim_start())
                 } else {
                     None // context mismatch (wrong context)
                 }
-            )?; // return because of context mismatch
+            })?; // return because of context mismatch
             i += 1;
         }
-        if self.global || args_until_last.get (i) == None
-        {
-            Some(ContextMatchResult {context_size: i})
-        }
-        else
-        {
+        if self.global || args_until_last.get(i) == None {
+            Some(ContextMatchResult { context_size: i })
+        } else {
             None
         }
     }
@@ -114,18 +111,21 @@ impl Trigger {
 
 impl Abbrev {
     pub fn matches(&self, args_until_last: &[&str], last_arg: &str) -> Option<MatchResult> {
-        let ContextMatchResult {context_size} = self.context.matches(args_until_last)?;
+        let ContextMatchResult { context_size } = self.context.matches(args_until_last)?;
         match self.trigger.matches(last_arg) {
-            Ok(true) => Some(MatchResult {abbrev: self, context_size}),
+            Ok(true) => Some(MatchResult {
+                abbrev: self,
+                context_size,
+            }),
             Ok(false) => None,
-            Err(err)=> {
+            Err(err) => {
                 let name = self.name.as_ref().unwrap_or(&self.snippet);
                 let error_message = format!("invalid regex in abbrev '{}': {}", name, err);
                 let error_style = Color::Red.normal();
 
                 eprintln!("{}", error_style.paint(error_message));
                 None
-            },
+            }
         }
     }
 }
@@ -150,7 +150,7 @@ mod tests {
                     global: false,
                 },
                 args_until_last: vec![],
-                expected: Some(ContextMatchResult{context_size: 0}),
+                expected: Some(ContextMatchResult { context_size: 0 }),
             },
             Scenario {
                 testname: r#"should not match if empty context, non-global, args == "a""#,
@@ -168,7 +168,7 @@ mod tests {
                     global: true,
                 },
                 args_until_last: vec![],
-                expected: Some(ContextMatchResult{context_size: 0}),
+                expected: Some(ContextMatchResult { context_size: 0 }),
             },
             Scenario {
                 testname: r#"should match if empty context, global, args == "a""#,
@@ -177,7 +177,7 @@ mod tests {
                     global: true,
                 },
                 args_until_last: vec!["a"],
-                expected: Some(ContextMatchResult{context_size: 0}),
+                expected: Some(ContextMatchResult { context_size: 0 }),
             },
             Scenario {
                 testname: r#"should not match if context == "git", non-global, args == """#,
@@ -204,7 +204,7 @@ mod tests {
                     global: false,
                 },
                 args_until_last: vec!["git"],
-                expected: Some(ContextMatchResult{context_size: 1}),
+                expected: Some(ContextMatchResult { context_size: 1 }),
             },
             Scenario {
                 testname: r#"should not match if context == "git", non-global, args == "git commit""#,
@@ -240,7 +240,7 @@ mod tests {
                     global: true,
                 },
                 args_until_last: vec!["git"],
-                expected: Some(ContextMatchResult{context_size: 1}),
+                expected: Some(ContextMatchResult { context_size: 1 }),
             },
             Scenario {
                 testname: r#"should match if context == "git", global, args == "git commit""#,
@@ -249,7 +249,7 @@ mod tests {
                     global: true,
                 },
                 args_until_last: vec!["git", "commit"],
-                expected: Some(ContextMatchResult{context_size: 1}),
+                expected: Some(ContextMatchResult { context_size: 1 }),
             },
             Scenario {
                 testname: r#"should match if context == "git", global, args == "echo git""#,
@@ -267,7 +267,7 @@ mod tests {
                     global: false,
                 },
                 args_until_last: vec!["git", "commit"],
-                expected: Some(ContextMatchResult{context_size: 2}),
+                expected: Some(ContextMatchResult { context_size: 2 }),
             },
             Scenario {
                 testname: r#"should match if context == "  git  commit  ", non-global, args == "git commit""#,
@@ -276,7 +276,7 @@ mod tests {
                     global: false,
                 },
                 args_until_last: vec!["git", "commit"],
-                expected: Some(ContextMatchResult{context_size: 2}),
+                expected: Some(ContextMatchResult { context_size: 2 }),
             },
             Scenario {
                 testname: r#"should not match if context == "git commit", non-global, args == "git""#,
@@ -339,7 +339,7 @@ mod tests {
                     global: true,
                 },
                 args_until_last: vec!["git", "commit"],
-                expected: Some(ContextMatchResult{context_size: 2}),
+                expected: Some(ContextMatchResult { context_size: 2 }),
             },
             Scenario {
                 testname: r#"should match if context == "git commit", global, args == "git commit -m""#,
@@ -348,7 +348,7 @@ mod tests {
                     global: true,
                 },
                 args_until_last: vec!["git", "commit", "-m"],
-                expected: Some(ContextMatchResult{context_size: 2}),
+                expected: Some(ContextMatchResult { context_size: 2 }),
             },
         ];
         for s in scenarios {

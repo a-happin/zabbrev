@@ -73,7 +73,8 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
     let match_result = config
         .abbrevs
         .iter()
-        .flat_map(|abbr| abbr.matches(&args_until_last, last_arg)).next()?;
+        .flat_map(|abbr| abbr.matches(&args_until_last, last_arg))
+        .next()?;
 
     let (startindex, endindex) = match match_result.abbrev.operation {
         Operation::ReplaceSelf => {
