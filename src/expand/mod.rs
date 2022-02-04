@@ -9,12 +9,13 @@ pub struct ExpandResult<'a> {
     pub lbuffer: &'a str,
     pub rbuffer: &'a str,
     pub last_arg: &'a str,
-    pub snippet: Snippet<'a>,
     pub start_index_of_replacement: usize,
     pub end_index_of_replacement: usize,
+    pub snippet: Snippet<'a>,
     pub is_append: bool,
     pub is_prepend: bool,
     pub evaluate: bool,
+    pub redraw: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -32,6 +33,11 @@ pub fn run(args: &ExpandArgs) {
             &result.lbuffer[result.end_index_of_replacement..],
         ));
         let rbuffer = escape(Cow::from(result.rbuffer));
+
+        print!(
+            r#"__zabbrev_no_space=;__zabbrev_redraw={};"#,
+            if result.redraw { "1" } else { "" }
+        );
 
         let evaluate = if result.evaluate {
             let last_arg = escape(Cow::from(result.last_arg));
@@ -59,7 +65,7 @@ pub fn run(args: &ExpandArgs) {
                 let first_snippet = escape(Cow::from(first_snippet));
                 let second_snippet = escape(Cow::from(second_snippet));
                 println!(
-                    r#"local snippet1={};local snippet2={};snippet1="${{{}snippet1}}" && snippet2="${{{evaluate}snippet2}}" && {{ LBUFFER={}"{}${{(pj: :)${{(@f)snippet1}}}}";RBUFFER="${{(pj: :)${{(@f)snippet2}}}}{}"{}{};__zabbrev_no_space=1;__zabbrev_redraw=1;}};"#,
+                    r#"local snippet1={};local snippet2={};snippet1="${{{}snippet1}}" && snippet2="${{{evaluate}snippet2}}" && {{ LBUFFER={}"{}${{(pj: :)${{(@f)snippet1}}}}";RBUFFER="${{(pj: :)${{(@f)snippet2}}}}{}"{}{};__zabbrev_no_space=1;}};"#,
                     first_snippet,
                     second_snippet,
                     evaluate,
@@ -150,6 +156,7 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         is_append,
         is_prepend,
         evaluate: match_result.abbrev.function.evaluate,
+        redraw: match_result.abbrev.function.redraw,
     })
 }
 
@@ -246,6 +253,7 @@ mod tests {
                     last_arg: "g",
                     snippet: Snippet::Simple("git"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -262,6 +270,7 @@ mod tests {
                     last_arg: "g",
                     snippet: Snippet::Simple("git"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -278,6 +287,7 @@ mod tests {
                     last_arg: "g",
                     snippet: Snippet::Simple("git"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -294,6 +304,7 @@ mod tests {
                     last_arg: "null",
                     snippet: Snippet::Simple(">/dev/null"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -310,6 +321,7 @@ mod tests {
                     last_arg: "c",
                     snippet: Snippet::Simple("commit"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -338,6 +350,7 @@ mod tests {
                     last_arg: "home",
                     snippet: Snippet::Simple("$HOME"),
                     evaluate: true,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -354,6 +367,7 @@ mod tests {
                     last_arg: "rm",
                     snippet: Snippet::Simple("-i"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -370,6 +384,7 @@ mod tests {
                     last_arg: "test.tar",
                     snippet: Snippet::Simple("tar -xvf"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -386,6 +401,7 @@ mod tests {
                     last_arg: "foo/bar",
                     snippet: Snippet::Simple("mkdir -p $1 && cd $1"),
                     evaluate: true,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -402,6 +418,7 @@ mod tests {
                     last_arg: "test.java",
                     snippet: Snippet::Simple("java -jar"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
             Scenario {
@@ -418,6 +435,7 @@ mod tests {
                     last_arg: "c",
                     snippet: Snippet::Simple("A"),
                     evaluate: false,
+                    redraw: false,
                 }),
             },
         ];

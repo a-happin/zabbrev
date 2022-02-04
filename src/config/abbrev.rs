@@ -100,6 +100,8 @@ pub struct Function {
     pub operation: Operation,
     #[serde(default = "default_as_false")]
     pub evaluate: bool,
+    #[serde(default = "default_as_false")]
+    pub redraw: bool,
 }
 impl Function {
     #[inline]
@@ -495,6 +497,7 @@ mod tests {
                     cursor: None,
                     operation: Operation::ReplaceSelf,
                     evaluate: false,
+                    redraw: false,
                 },
                 expected: Snippet::Simple("[[ <> ]]"),
             },
@@ -505,6 +508,7 @@ mod tests {
                     cursor: Some("🐣".to_string()),
                     operation: Operation::ReplaceSelf,
                     evaluate: false,
+                    redraw: false,
                 },
                 expected: Snippet::Simple("[[ <> ]]"),
             },
@@ -515,6 +519,7 @@ mod tests {
                     cursor: Some("🐣".to_string()),
                     operation: Operation::ReplaceSelf,
                     evaluate: false,
+                    redraw: false,
                 },
                 expected: Snippet::Divided("[[ ", " ]]"),
             },

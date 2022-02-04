@@ -4,15 +4,14 @@ zle -N __zabbrev::expand-and-accept-line
 zle -N __zabbrev::insert-space
 
 __zabbrev::expand() {
-    local out exit_code
-    out="$(zabbrev expand --lbuffer="$LBUFFER" --rbuffer="$RBUFFER")"
-    exit_code="$?"
-    [ "$exit_code" -eq 0 ] && eval "$out"
+    local out
+    out="$(zabbrev expand --lbuffer="$LBUFFER" --rbuffer="$RBUFFER")" || return
+    eval "$out"
+    return 0
 }
 
 __zabbrev::expand-and-insert-self() {
-    zle __zabbrev::expand
-    [[ $__zabbrev_redraw -eq 1 ]] && zle reset-prompt
+    zle __zabbrev::expand && [[ $__zabbrev_redraw -eq 1 ]] && zle reset-prompt
     [[ $__zabbrev_no_space -ne 1 ]] && zle self-insert
     unset __zabbrev_no_space __zabbrev_redraw
 }
