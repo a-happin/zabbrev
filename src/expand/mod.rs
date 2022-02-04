@@ -1,5 +1,4 @@
-use crate::config::abbrev::{Operation, Snippet};
-use crate::config::Config;
+use crate::config::{Config, Operation, Snippet};
 use crate::opt::ExpandArgs;
 use shell_escape::escape;
 use std::borrow::Cow;
@@ -105,24 +104,38 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         .flat_map(|abbr| abbr.matches(&args_until_last, last_arg))
         .next()?;
 
-    let (start_index_of_replacement, end_index_of_replacement, append, prepend) =
+    let cursor = match_result.abbrev.function.cursor.as_deref();
+
+    let (start_index_of_replacement, end_index_of_replacement, append, prepend, snippet) =
         match match_result.abbrev.function.operation {
-            Operation::ReplaceSelf => {
+            Operation::ReplaceSelf(ref snippet) => {
                 let index = lbuffer.len() - last_arg.len();
-                (index, lbuffer.len(), false, false)
+                (
+                    index,
+                    lbuffer.len(),
+                    false,
+                    false,
+                    Snippet::new(snippet, cursor),
+                )
             }
-            Operation::ReplaceFirst => {
+            Operation::ReplaceFirst(ref snippet) => {
                 let index = lbuffer.len() - command.len();
                 let len = args_until_last
                     .first()
                     .map(|&x| x.len())
                     .unwrap_or_else(|| last_arg.len());
-                (index, index + len, false, false)
+                (
+                    index,
+                    index + len,
+                    false,
+                    false,
+                    Snippet::new(snippet, cursor),
+                )
             }
-            Operation::ReplaceContext => {
+            Operation::ReplaceContext(ref snippet) => {
                 let index = lbuffer.len() - command.len();
                 match match_result.context_size {
-                    0 => (index, index, false, true),
+                    0 => (index, index, false, true, Snippet::new(snippet, cursor)),
                     context_size => {
                         let last_arg_of_context = args_until_last[context_size - 1];
                         (
@@ -131,21 +144,28 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
                                 + last_arg_of_context.len(),
                             false,
                             false,
+                            Snippet::new(snippet, cursor),
                         )
                     }
                 }
             }
-            Operation::ReplaceAll => {
+            Operation::ReplaceAll(ref snippet) => {
                 let index = lbuffer.len() - command.len();
-                (index, lbuffer.len(), false, false)
+                (
+                    index,
+                    lbuffer.len(),
+                    false,
+                    false,
+                    Snippet::new(snippet, cursor),
+                )
             }
-            Operation::Append => {
+            Operation::Append(ref snippet) => {
                 let index = lbuffer.len();
-                (index, index, true, false)
+                (index, index, true, false, Snippet::new(snippet, cursor))
             }
-            Operation::Prepend => {
+            Operation::Prepend(ref snippet) => {
                 let index = lbuffer.len() - command.len();
-                (index, index, false, true)
+                (index, index, false, true, Snippet::new(snippet, cursor))
             }
         };
 
@@ -155,7 +175,7 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         start_index_of_replacement,
         end_index_of_replacement,
         last_arg,
-        snippet: match_result.abbrev.function.get_snippet(),
+        snippet,
         append,
         prepend,
         evaluate: match_result.abbrev.function.evaluate,
@@ -173,52 +193,47 @@ mod tests {
             abbrevs:
               - name: git
                 abbr: g
-                snippet: git
+                replace-self: git
 
               - name: git commit
                 abbr: c
-                snippet: commit
+                replace-self: commit
                 global: false
                 context: 'git'
 
               - name: '>/dev/null'
                 abbr: 'null'
-                snippet: '>/dev/null'
+                replace-self: '>/dev/null'
                 global: true
 
               - name: $HOME
                 abbr: home
-                snippet: $HOME
+                replace-self: $HOME
                 evaluate: true
 
               - name: default argument
                 abbr: rm
-                snippet: -i
-                operation: append
+                append: -i
 
               - name: fake command
                 context: 'extract'
                 abbr-regex: '\.tar$'
-                snippet: 'tar -xvf'
-                operation: replace-first
+                replace-first: 'tar -xvf'
 
               - name: 'function?'
                 context: 'mkdircd'
                 abbr-regex: '.+'
-                snippet: 'mkdir -p $1 && cd $1'
-                operation: replace-all
+                replace-all: 'mkdir -p $1 && cd $1'
                 evaluate: true
 
               - name: associated command
                 abbr-regex: '\.java$'
-                snippet: 'java -jar'
-                operation: prepend
+                prepend: 'java -jar'
 
               - name: context replacement
                 context: 'a b'
                 abbr: c
-                snippet: 'A'
-                operation: replace-context
+                replace-context: 'A'
             ",
         )
         .unwrap()

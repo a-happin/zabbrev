@@ -29,22 +29,22 @@ mod tests {
             abbrevs:
               - name: git
                 abbr: g
-                snippet: git
+                replace-self: git
 
               - name: git commit
                 abbr: c
-                snippet: commit
+                replace-self: commit
                 global: true
                 context: 'git'
 
               - name: '>/dev/null'
                 abbr: 'null'
-                snippet: '>/dev/null'
+                replace-self: '>/dev/null'
                 global: true
 
               - name: $HOME
                 abbr: home
-                snippet: $HOME
+                replace-self: $HOME
                 evaluate: true
             ",
         )

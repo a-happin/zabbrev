@@ -1,7 +1,7 @@
 pub mod abbrev;
 pub mod config_path;
 
-pub use abbrev::Abbrev;
+pub use abbrev::*;
 pub use config_path::default_config_path;
 
 use ansi_term::Color;

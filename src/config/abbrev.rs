@@ -74,50 +74,54 @@ impl Trigger {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Operation {
     #[serde(rename = "replace-self")]
-    ReplaceSelf,
+    ReplaceSelf(String),
     #[serde(rename = "replace-first")]
-    ReplaceFirst,
+    ReplaceFirst(String),
     #[serde(rename = "replace-context")]
-    ReplaceContext,
+    ReplaceContext(String),
     #[serde(rename = "replace-all")]
-    ReplaceAll,
+    ReplaceAll(String),
     #[serde(rename = "append")]
-    Append,
+    Append(String),
     #[serde(rename = "prepend")]
-    Prepend,
+    Prepend(String),
 }
-impl Default for Operation {
-    fn default() -> Self {
-        Operation::ReplaceSelf
+impl Operation {
+    #[inline]
+    fn get_snippet_string(&self) -> &str {
+        match self {
+            Self::ReplaceSelf(snippet) => snippet,
+            Self::ReplaceFirst(snippet) => snippet,
+            Self::ReplaceContext(snippet) => snippet,
+            Self::ReplaceAll(snippet) => snippet,
+            Self::Append(snippet) => snippet,
+            Self::Prepend(snippet) => snippet,
+        }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Function {
-    pub snippet: String,
-    pub cursor: Option<String>,
-    #[serde(default)]
+    #[serde(flatten)]
     pub operation: Operation,
+
+    pub cursor: Option<String>,
+
     #[serde(default = "default_as_false")]
     pub evaluate: bool,
+
     #[serde(default = "default_as_false")]
     pub redraw: bool,
 }
 impl Function {
     #[inline]
     pub fn get_snippet_string(&self) -> &str {
-        &self.snippet
+        self.operation.get_snippet_string()
     }
     #[inline]
-    fn get_divided_snippet(&self) -> Option<Snippet> {
-        let cursor = self.cursor.as_ref()?;
-        let (first, second) = self.snippet.split_once(cursor)?;
-        Some(Snippet::Divided(first, second))
-    }
-    #[inline]
-    pub fn get_snippet(&self) -> Snippet {
-        self.get_divided_snippet()
-            .unwrap_or_else(|| Snippet::Simple(&self.snippet))
+    #[allow(dead_code)]
+    fn get_snippet(&self) -> Snippet {
+        Snippet::new(self.get_snippet_string(), self.cursor.as_deref())
     }
 }
 
@@ -154,6 +158,7 @@ impl Abbrev {
             }
         }
     }
+    #[inline]
     pub fn get_name(&self) -> &str {
         match self.name {
             Some(ref name) => name,
@@ -172,6 +177,18 @@ pub struct MatchResult<'a> {
 pub enum Snippet<'a> {
     Simple(&'a str),
     Divided(&'a str, &'a str),
+}
+impl<'a> Snippet<'a> {
+    #[inline]
+    fn new_impl(snippet_string: &'a str, cursor: Option<&str>) -> Option<Snippet<'a>> {
+        let cursor = cursor?;
+        let (first, second) = snippet_string.split_once(cursor)?;
+        Some(Self::Divided(first, second))
+    }
+    #[inline]
+    pub fn new(snippet_string: &'a str, cursor: Option<&str>) -> Self {
+        Snippet::new_impl(snippet_string, cursor).unwrap_or_else(|| Self::Simple(snippet_string))
+    }
 }
 
 #[cfg(test)]
@@ -493,9 +510,8 @@ mod tests {
             Scenario {
                 testname: "no division",
                 function: Function {
-                    snippet: "[[ <> ]]".to_string(),
+                    operation: Operation::ReplaceSelf("[[ <> ]]".to_string()),
                     cursor: None,
-                    operation: Operation::ReplaceSelf,
                     evaluate: false,
                     redraw: false,
                 },
@@ -504,9 +520,8 @@ mod tests {
             Scenario {
                 testname: "division failed",
                 function: Function {
-                    snippet: "[[ <> ]]".to_string(),
+                    operation: Operation::ReplaceSelf("[[ <> ]]".to_string()),
                     cursor: Some("🐣".to_string()),
-                    operation: Operation::ReplaceSelf,
                     evaluate: false,
                     redraw: false,
                 },
@@ -515,9 +530,8 @@ mod tests {
             Scenario {
                 testname: "divide correctly",
                 function: Function {
-                    snippet: "[[ 🐣 ]]".to_string(),
+                    operation: Operation::ReplaceSelf("[[ 🐣 ]]".to_string()),
                     cursor: Some("🐣".to_string()),
-                    operation: Operation::ReplaceSelf,
                     evaluate: false,
                     redraw: false,
                 },
