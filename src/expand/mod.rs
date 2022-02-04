@@ -12,8 +12,8 @@ pub struct ExpandResult<'a> {
     pub start_index_of_replacement: usize,
     pub end_index_of_replacement: usize,
     pub snippet: Snippet<'a>,
-    pub is_append: bool,
-    pub is_prepend: bool,
+    pub append: bool,
+    pub prepend: bool,
     pub evaluate: bool,
     pub redraw: bool,
 }
@@ -33,6 +33,9 @@ pub fn run(args: &ExpandArgs) {
             &result.lbuffer[result.end_index_of_replacement..],
         ));
         let rbuffer = escape(Cow::from(result.rbuffer));
+
+        let joint_append = if result.append { " " } else { "" };
+        let joint_prepend = if result.prepend { " " } else { "" };
 
         print!(
             r#"__zabbrev_no_space=;__zabbrev_redraw={};"#,
@@ -55,8 +58,8 @@ pub fn run(args: &ExpandArgs) {
                     snippet,
                     evaluate,
                     lbuffer_prev,
-                    if result.is_append { " " } else { "" },
-                    if result.is_prepend { " " } else { "" },
+                    joint_append,
+                    joint_prepend,
                     lbuffer_post,
                     rbuffer
                 )
@@ -70,8 +73,8 @@ pub fn run(args: &ExpandArgs) {
                     second_snippet,
                     evaluate,
                     lbuffer_prev,
-                    if result.is_append { " " } else { "" },
-                    if result.is_prepend { " " } else { "" },
+                    joint_append,
+                    joint_prepend,
                     lbuffer_post,
                     rbuffer
                 )
@@ -102,7 +105,7 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         .flat_map(|abbr| abbr.matches(&args_until_last, last_arg))
         .next()?;
 
-    let (start_index_of_replacement, end_index_of_replacement, is_append, is_prepend) =
+    let (start_index_of_replacement, end_index_of_replacement, append, prepend) =
         match match_result.abbrev.function.operation {
             Operation::ReplaceSelf => {
                 let index = lbuffer.len() - last_arg.len();
@@ -113,7 +116,7 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
                 let len = args_until_last
                     .first()
                     .map(|&x| x.len())
-                    .unwrap_or(last_arg.len());
+                    .unwrap_or_else(|| last_arg.len());
                 (index, index + len, false, false)
             }
             Operation::ReplaceContext => {
@@ -153,8 +156,8 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         end_index_of_replacement,
         last_arg,
         snippet: match_result.abbrev.function.get_snippet(),
-        is_append,
-        is_prepend,
+        append,
+        prepend,
         evaluate: match_result.abbrev.function.evaluate,
         redraw: match_result.abbrev.function.redraw,
     })
@@ -248,8 +251,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 1,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "g",
                     snippet: Snippet::Simple("git"),
                     evaluate: false,
@@ -265,8 +268,8 @@ mod tests {
                     rbuffer: " --pager=never",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 1,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "g",
                     snippet: Snippet::Simple("git"),
                     evaluate: false,
@@ -282,8 +285,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 12,
                     end_index_of_replacement: 13,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "g",
                     snippet: Snippet::Simple("git"),
                     evaluate: false,
@@ -299,8 +302,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 11,
                     end_index_of_replacement: 15,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "null",
                     snippet: Snippet::Simple(">/dev/null"),
                     evaluate: false,
@@ -316,8 +319,8 @@ mod tests {
                     rbuffer: " -m hello",
                     start_index_of_replacement: 16,
                     end_index_of_replacement: 17,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "c",
                     snippet: Snippet::Simple("commit"),
                     evaluate: false,
@@ -345,8 +348,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 4,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "home",
                     snippet: Snippet::Simple("$HOME"),
                     evaluate: true,
@@ -362,8 +365,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 2,
                     end_index_of_replacement: 2,
-                    is_append: true,
-                    is_prepend: false,
+                    append: true,
+                    prepend: false,
                     last_arg: "rm",
                     snippet: Snippet::Simple("-i"),
                     evaluate: false,
@@ -379,8 +382,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 7,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "test.tar",
                     snippet: Snippet::Simple("tar -xvf"),
                     evaluate: false,
@@ -396,8 +399,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 15,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "foo/bar",
                     snippet: Snippet::Simple("mkdir -p $1 && cd $1"),
                     evaluate: true,
@@ -413,8 +416,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 0,
-                    is_append: false,
-                    is_prepend: true,
+                    append: false,
+                    prepend: true,
                     last_arg: "test.java",
                     snippet: Snippet::Simple("java -jar"),
                     evaluate: false,
@@ -430,8 +433,8 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 1,
                     end_index_of_replacement: 4,
-                    is_append: false,
-                    is_prepend: false,
+                    append: false,
+                    prepend: false,
                     last_arg: "c",
                     snippet: Snippet::Simple("A"),
                     evaluate: false,
