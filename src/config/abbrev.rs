@@ -10,6 +10,33 @@ pub struct Context {
     #[serde(default = "default_as_false")]
     pub global: bool,
 }
+impl Context {
+    fn matches(&self, args_until_last: &[&str]) -> Option<ContextMatchResult> {
+        let mut context = self.context.trim_start();
+        let mut i = 0;
+        while !context.is_empty() {
+            let &arg = args_until_last.get(i)?; // return because of too few arguments
+            context = context.strip_prefix(arg).and_then(|context| {
+                if context.is_empty() || context.starts_with(char::is_whitespace) {
+                    Some(context.trim_start())
+                } else {
+                    None // context mismatch (wrong context)
+                }
+            })?; // return because of context mismatch
+            i += 1;
+        }
+        if self.global || args_until_last.get(i) == None {
+            Some(ContextMatchResult { context_size: i })
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct ContextMatchResult {
+    pub context_size: usize,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Trigger {
@@ -21,6 +48,27 @@ pub enum Trigger {
     AbbrPrefix(String),
     #[serde(rename = "abbr-regex")]
     AbbrRegex(String),
+}
+impl Trigger {
+    pub fn get_abbr(&self) -> &str {
+        match self {
+            Self::AbbrString(ref abbr) => abbr,
+            Self::AbbrSuffix(ref suffix) => suffix,
+            Self::AbbrPrefix(ref prefix) => prefix,
+            Self::AbbrRegex(ref regex) => regex,
+        }
+    }
+    pub fn matches(&self, last_arg: &str) -> Result<bool, regex::Error> {
+        match self {
+            Self::AbbrString(ref abbr) => Ok(last_arg == abbr),
+            Self::AbbrSuffix(ref suffix) => Ok(last_arg.ends_with(suffix)),
+            Self::AbbrPrefix(ref prefix) => Ok(last_arg.starts_with(prefix)),
+            Self::AbbrRegex(ref regex) => {
+                let pattern = Regex::new(regex)?;
+                Ok(pattern.is_match(last_arg))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -45,6 +93,33 @@ impl Default for Operation {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct Function {
+    pub snippet: String,
+    pub cursor: Option<String>,
+    #[serde(default)]
+    pub operation: Operation,
+    #[serde(default = "default_as_false")]
+    pub evaluate: bool,
+}
+impl Function {
+    #[inline]
+    pub fn get_snippet_string(&self) -> &str {
+        &self.snippet
+    }
+    #[inline]
+    fn get_divided_snippet(&self) -> Option<Snippet> {
+        let cursor = self.cursor.as_ref()?;
+        let (first, second) = self.snippet.split_once(cursor)?;
+        Some(Snippet::Divided(first, second))
+    }
+    #[inline]
+    pub fn get_snippet(&self) -> Snippet {
+        self.get_divided_snippet()
+            .unwrap_or_else(|| Snippet::Simple(&self.snippet))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Abbrev {
     pub name: Option<String>,
 
@@ -54,69 +129,8 @@ pub struct Abbrev {
     #[serde(flatten)]
     pub trigger: Trigger,
 
-    pub snippet: String,
-
-    #[serde(default)]
-    pub operation: Operation,
-
-    #[serde(default = "default_as_false")]
-    pub evaluate: bool,
-}
-
-#[derive(Debug, PartialEq)]
-struct ContextMatchResult {
-    pub context_size: usize,
-}
-
-#[derive(Debug)]
-pub struct MatchResult<'a> {
-    pub abbrev: &'a Abbrev,
-    pub context_size: usize,
-}
-
-impl Context {
-    fn matches(&self, args_until_last: &[&str]) -> Option<ContextMatchResult> {
-        let mut context = self.context.trim_start();
-        let mut i = 0;
-        while !context.is_empty() {
-            let &arg = args_until_last.get(i)?; // return because of too few arguments
-            context = context.strip_prefix(arg).and_then(|context| {
-                if context.is_empty() || context.starts_with(char::is_whitespace) {
-                    Some(context.trim_start())
-                } else {
-                    None // context mismatch (wrong context)
-                }
-            })?; // return because of context mismatch
-            i += 1;
-        }
-        if self.global || args_until_last.get(i) == None {
-            Some(ContextMatchResult { context_size: i })
-        } else {
-            None
-        }
-    }
-}
-
-impl Trigger {
-    pub fn get_abbr (&self) -> &str {
-        match self {
-            Self::AbbrString(ref abbr) => abbr,
-            Self::AbbrSuffix(ref suffix) => suffix,
-            Self::AbbrPrefix(ref prefix) => prefix,
-            Self::AbbrRegex(ref regex) => regex,
-        }
-    }
-    pub fn matches(&self, last_arg: &str) -> Result<bool, regex::Error> {
-        match self {
-            Self::AbbrString(ref abbr) => Ok(last_arg == abbr),
-            Self::AbbrSuffix(ref suffix) => Ok(last_arg.ends_with(suffix)),
-            Self::AbbrPrefix(ref prefix) => Ok(last_arg.starts_with(prefix)),
-            Self::AbbrRegex(ref regex) => {
-                let pattern = Regex::new(regex)?;
-                Ok(pattern.is_match(last_arg))
-            }
-        }
-    }
+    #[serde(flatten)]
+    pub function: Function,
 }
 
 impl Abbrev {
@@ -129,8 +143,8 @@ impl Abbrev {
             }),
             Ok(false) => None,
             Err(err) => {
-                let name = self.name.as_ref().unwrap_or(&self.snippet);
-                let error_message = format!("invalid regex in abbrev '{}': {}", name, err);
+                let error_message =
+                    format!("invalid regex in abbrev '{}': {}", self.get_name(), err);
                 let error_style = Color::Red.normal();
 
                 eprintln!("{}", error_style.paint(error_message));
@@ -138,6 +152,24 @@ impl Abbrev {
             }
         }
     }
+    pub fn get_name(&self) -> &str {
+        match self.name {
+            Some(ref name) => name,
+            None => self.function.get_snippet_string(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct MatchResult<'a> {
+    pub abbrev: &'a Abbrev,
+    pub context_size: usize,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Snippet<'a> {
+    Simple(&'a str),
+    Divided(&'a str, &'a str),
 }
 
 #[cfg(test)]
@@ -444,6 +476,51 @@ mod tests {
         ];
         for s in scenarios {
             assert_eq!(s.trigger.matches(&s.last_arg), s.expected, "{}", s.testname);
+        }
+    }
+
+    #[test]
+    fn test_divide_snippet() {
+        struct Scenario {
+            pub testname: &'static str,
+            pub function: Function,
+            pub expected: Snippet<'static>,
+        }
+
+        let scenarios = &[
+            Scenario {
+                testname: "no division",
+                function: Function {
+                    snippet: "[[ <> ]]".to_string(),
+                    cursor: None,
+                    operation: Operation::ReplaceSelf,
+                    evaluate: false,
+                },
+                expected: Snippet::Simple("[[ <> ]]"),
+            },
+            Scenario {
+                testname: "division failed",
+                function: Function {
+                    snippet: "[[ <> ]]".to_string(),
+                    cursor: Some("🐣".to_string()),
+                    operation: Operation::ReplaceSelf,
+                    evaluate: false,
+                },
+                expected: Snippet::Simple("[[ <> ]]"),
+            },
+            Scenario {
+                testname: "divide correctly",
+                function: Function {
+                    snippet: "[[ 🐣 ]]".to_string(),
+                    cursor: Some("🐣".to_string()),
+                    operation: Operation::ReplaceSelf,
+                    evaluate: false,
+                },
+                expected: Snippet::Divided("[[ ", " ]]"),
+            },
+        ];
+        for s in scenarios {
+            assert_eq!(s.function.get_snippet(), s.expected, "{}", s.testname);
         }
     }
 }

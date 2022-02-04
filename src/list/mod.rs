@@ -11,7 +11,7 @@ pub fn run(args: &ListArgs) {
 fn list<W: io::Write>(_args: &ListArgs, config: &Config, out: &mut W) -> Result<(), io::Error> {
     for abbrev in &config.abbrevs {
         let abbr = abbrev.trigger.get_abbr();
-        let snippet = escape(Cow::from(&abbrev.snippet));
+        let snippet = escape(Cow::from(abbrev.function.get_snippet_string()));
 
         writeln!(out, "{}={}", abbr, snippet)?;
     }

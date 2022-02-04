@@ -1,4 +1,4 @@
-use crate::config::abbrev::Operation;
+use crate::config::abbrev::{Operation, Snippet};
 use crate::config::Config;
 use crate::opt::ExpandArgs;
 use shell_escape::escape;
@@ -9,7 +9,7 @@ pub struct ExpandResult<'a> {
     pub lbuffer: &'a str,
     pub rbuffer: &'a str,
     pub last_arg: &'a str,
-    pub snippet: &'a str,
+    pub snippet: Snippet<'a>,
     pub start_index_of_replacement: usize,
     pub end_index_of_replacement: usize,
     pub is_append: bool,
@@ -31,22 +31,46 @@ pub fn run(args: &ExpandArgs) {
         let lbuffer_post = escape(Cow::from(
             &result.lbuffer[result.end_index_of_replacement..],
         ));
-        let last_arg = escape(Cow::from(result.last_arg));
-        let snippet = escape(Cow::from(result.snippet));
         let rbuffer = escape(Cow::from(result.rbuffer));
-        let evaluate = if result.evaluate { "(e)" } else { "" };
 
-        println!(
-            r#"local snippet={};set -- {};snippet="${{{}snippet}}";[[ $? -eq 0 ]] && {{ LBUFFER={}"{}${{(pj: :)${{(@f)snippet}}}}{}"{};RBUFFER={};}};"#,
-            snippet,
-            last_arg,
-            evaluate,
-            lbuffer_prev,
-            if result.is_append { " " } else { "" },
-            if result.is_prepend { " " } else { "" },
-            lbuffer_post,
-            rbuffer
-        );
+        let evaluate = if result.evaluate {
+            let last_arg = escape(Cow::from(result.last_arg));
+            print!(r#"set -- {};"#, last_arg);
+            "(e)"
+        } else {
+            ""
+        };
+
+        match result.snippet {
+            Snippet::Simple(snippet) => {
+                let snippet = escape(Cow::from(snippet));
+                println!(
+                    r#"local snippet={};snippet="${{{}snippet}}" && {{ LBUFFER={}"{}${{(pj: :)${{(@f)snippet}}}}{}"{};RBUFFER={};}};"#,
+                    snippet,
+                    evaluate,
+                    lbuffer_prev,
+                    if result.is_append { " " } else { "" },
+                    if result.is_prepend { " " } else { "" },
+                    lbuffer_post,
+                    rbuffer
+                )
+            }
+            Snippet::Divided(first_snippet, second_snippet) => {
+                let first_snippet = escape(Cow::from(first_snippet));
+                let second_snippet = escape(Cow::from(second_snippet));
+                println!(
+                    r#"local snippet1={};local snippet2={};snippet1="${{{}snippet1}}" && snippet2="${{{evaluate}snippet2}}" && {{ LBUFFER={}"{}${{(pj: :)${{(@f)snippet1}}}}";RBUFFER="${{(pj: :)${{(@f)snippet2}}}}{}"{}{};__zabbrev_no_space=1;__zabbrev_redraw=1;}};"#,
+                    first_snippet,
+                    second_snippet,
+                    evaluate,
+                    lbuffer_prev,
+                    if result.is_append { " " } else { "" },
+                    if result.is_prepend { " " } else { "" },
+                    lbuffer_post,
+                    rbuffer
+                )
+            }
+        }
     }
 }
 
@@ -73,7 +97,7 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         .next()?;
 
     let (start_index_of_replacement, end_index_of_replacement, is_append, is_prepend) =
-        match match_result.abbrev.operation {
+        match match_result.abbrev.function.operation {
             Operation::ReplaceSelf => {
                 let index = lbuffer.len() - last_arg.len();
                 (index, lbuffer.len(), false, false)
@@ -122,10 +146,10 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         start_index_of_replacement,
         end_index_of_replacement,
         last_arg,
-        snippet: &match_result.abbrev.snippet,
+        snippet: match_result.abbrev.function.get_snippet(),
         is_append,
         is_prepend,
-        evaluate: match_result.abbrev.evaluate,
+        evaluate: match_result.abbrev.function.evaluate,
     })
 }
 
@@ -220,7 +244,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "g",
-                    snippet: "git",
+                    snippet: Snippet::Simple("git"),
                     evaluate: false,
                 }),
             },
@@ -236,7 +260,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "g",
-                    snippet: "git",
+                    snippet: Snippet::Simple("git"),
                     evaluate: false,
                 }),
             },
@@ -252,7 +276,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "g",
-                    snippet: "git",
+                    snippet: Snippet::Simple("git"),
                     evaluate: false,
                 }),
             },
@@ -268,7 +292,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "null",
-                    snippet: ">/dev/null",
+                    snippet: Snippet::Simple(">/dev/null"),
                     evaluate: false,
                 }),
             },
@@ -284,7 +308,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "c",
-                    snippet: "commit",
+                    snippet: Snippet::Simple("commit"),
                     evaluate: false,
                 }),
             },
@@ -312,7 +336,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "home",
-                    snippet: "$HOME",
+                    snippet: Snippet::Simple("$HOME"),
                     evaluate: true,
                 }),
             },
@@ -328,7 +352,7 @@ mod tests {
                     is_append: true,
                     is_prepend: false,
                     last_arg: "rm",
-                    snippet: "-i",
+                    snippet: Snippet::Simple("-i"),
                     evaluate: false,
                 }),
             },
@@ -344,7 +368,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "test.tar",
-                    snippet: "tar -xvf",
+                    snippet: Snippet::Simple("tar -xvf"),
                     evaluate: false,
                 }),
             },
@@ -360,7 +384,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "foo/bar",
-                    snippet: "mkdir -p $1 && cd $1",
+                    snippet: Snippet::Simple("mkdir -p $1 && cd $1"),
                     evaluate: true,
                 }),
             },
@@ -376,7 +400,7 @@ mod tests {
                     is_append: false,
                     is_prepend: true,
                     last_arg: "test.java",
-                    snippet: "java -jar",
+                    snippet: Snippet::Simple("java -jar"),
                     evaluate: false,
                 }),
             },
@@ -392,7 +416,7 @@ mod tests {
                     is_append: false,
                     is_prepend: false,
                     last_arg: "c",
-                    snippet: "A",
+                    snippet: Snippet::Simple("A"),
                     evaluate: false,
                 }),
             },
