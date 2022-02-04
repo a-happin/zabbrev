@@ -1,97 +1,120 @@
 # ~/.config/zsh/zabbrev.yaml
 abbrevs:
-  # normal abbreviations
+  # simple abbreviation
   - name: git
     abbr: 'g'
-    snippet: 'git'
+    replace-self: 'git'
 
   - name: editor
     abbr: 'e'
-    snippet: '${EDITOR}'
+    replace-self: '${EDITOR}'
     evaluate: true
 
   # add default option
   - name: mv -i
     abbr: 'mv'
-    snippet: '-i'
-    operation: append
+    append: '-i'
 
   # prepend sudo
   - name: sudo apt
     abbr: 'apt'
-    snippet: 'sudo'
-    operation: prepend
+    prepend: 'sudo'
 
-  # subcommand abbreviations
+  # subcommand abbreviation
   - name: git commit
     context: 'git'
     abbr: 'c'
-    snippet: 'commit'
+    replace-self: 'commit'
 
   - name: git push -u origin HEAD
     context: 'git'
     abbr: 'pu'
-    snippet: 'push -u origin HEAD'
+    replace-self: 'push -u origin HEAD'
 
+  # subcommand abbreviation with evaluate
   - name: git pull --rebase origin CURRENT_BRANCH
     context: 'git'
     abbr: 'pr'
-    snippet: 'pull --rebase origin $(git symbolic-ref --short HEAD)'
+    replace-self: 'pull --rebase origin $(git symbolic-ref --short HEAD)'
+    evaluate: true
+
+  # fix option
+  - name: replace -f with --force-with-lease
+    context: 'git push'
+    abbr: '-f'
+    replace-self: '--force-with-lease'
+    global: true
     evaluate: true
 
   # fake command
+  - name: compile cpp
+    context: 'compile'
+    abbr-suffix: '.cpp'
+    replace-first: 'g++ -std=c++2b -Wall -Wextra -pedantic-errors'
+
   - name: extract tar
     context: 'extract'
-    abbr-regex: '\.tar$'
-    snippet: 'tar -xvf'
-    operation: replace-command
+    abbr-suffix: '.tar'
+    replace-first: 'tar -xvf'
 
   - name: compress tar
     context: 'compress'
-    abbr-regex: '\.tar$'
-    snippet: 'tar -cvf'
-    operation: replace-command
+    abbr-suffix: '.tar'
+    replace-first: 'tar -cvf'
 
   # associated command
   - name: run jar file
-    abbr-regex: '\.jar$'
-    snippet: 'java -jar'
-    operation: prepend
+    abbr-suffix: '.jar'
+    prepend: 'java -jar'
 
   # like a function
   - name: mkdircd
     context: 'mkdircd'
-    abbr-regex: '.+'
-    snippet: 'mkdir -p $1 && cd $1'
-    operation: replace-all
+    abbr-prefix: ''
+    replace-all: 'mkdir -p $1 && cd $1'
     evaluate: true
 
-  # global abbreviations
+  # global abbreviation
   - name: '>/dev/null'
     abbr: 'null'
-    snippet: '>/dev/null'
+    replace-self: '>/dev/null'
     global: true
 
-  # global abbreviations with context
+  # global abbreviation with context
   - name: git current branch
     context: 'git'
     abbr: 'B'
-    snippet: '$(git symbolic-ref --short HEAD)'
+    replace-self: '$(git symbolic-ref --short HEAD)'
     global: true
     evaluate: true
 
   # as one pleases
-  # You don't have to remember shortcut key.
   - context: 'cd'
     abbr: 'f'
-    snippet: $(fd --type d --hidden --no-ignore --exclude .git | fzf --preview 'exa -lha --time-style long-iso --color=always {}')
+    replace-self: $(fd --type d --hidden --no-ignore --exclude .git | fzf --preview 'exa -lha --time-style long-iso --color=always {}')
     evaluate: true
+    redraw: true
+
   - context: 'cd'
     abbr: 'g'
-    snippet: $(fd --type d --hidden --follow '^.git$' ~ -x dirname | fzf --preview 'git -c color.status=always -C {} status')
+    replace-self: $(fd --type d --hidden --follow '^.git$' ~ -x dirname | fzf --preview 'git -c color.status=always -C {} status')
     evaluate: true
+    redraw: true
+
   # choose commit interactively
-  - context: 'git'
-    abbr: 'i'
-    snippet: rebase -i $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always \$(printf '%s' {} | grep -io '[0-9a-f]\{7,\}' | head -1)" | \grep -io '[0-9a-f]\{7,\}' | head -1)
+  - context: 'git rebase'
+    abbr: '-i'
+    append: $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always \$(printf '%s' {} | grep -io '[0-9a-f]\{7,\}' | head -1)" | \grep -io '[0-9a-f]\{7,\}' | head -1)
     evaluate: true
+    redraw: true
+
+  # ?????
+  - context: 'rm -i'
+    abbr-prefix: ''
+    replace-context: rm $([[ -d $1 ]] && printf '%s' '-ri' || printf '%s' '-i')
+    evaluate: true
+
+  # [[  ]]
+  - abbr: '[['
+    replace-self: '[[ 🐣 ]]'
+    cursor: '🐣'
