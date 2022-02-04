@@ -17,6 +17,8 @@ pub enum Trigger {
     AbbrString(String),
     #[serde(rename = "abbr-suffix")]
     AbbrSuffix(String),
+    #[serde(rename = "abbr-prefix")]
+    AbbrPrefix(String),
     #[serde(rename = "abbr-regex")]
     AbbrRegex(String),
 }
@@ -96,13 +98,19 @@ impl Context {
 }
 
 impl Trigger {
+    pub fn get_abbr (&self) -> &str {
+        match self {
+            Self::AbbrString(ref abbr) => abbr,
+            Self::AbbrSuffix(ref suffix) => suffix,
+            Self::AbbrPrefix(ref prefix) => prefix,
+            Self::AbbrRegex(ref regex) => regex,
+        }
+    }
     pub fn matches(&self, last_arg: &str) -> Result<bool, regex::Error> {
         match self {
             Self::AbbrString(ref abbr) => Ok(last_arg == abbr),
-            Self::AbbrSuffix(ref suffix) => Ok(match last_arg.strip_suffix(suffix) {
-                Some(last_arg) => last_arg.ends_with("."),
-                None => false,
-            }),
+            Self::AbbrSuffix(ref suffix) => Ok(last_arg.ends_with(suffix)),
+            Self::AbbrPrefix(ref prefix) => Ok(last_arg.starts_with(prefix)),
             Self::AbbrRegex(ref regex) => {
                 let pattern = Regex::new(regex)?;
                 Ok(pattern.is_match(last_arg))
@@ -387,26 +395,38 @@ mod tests {
             },
             Scenario {
                 testname: "should match suffix",
-                trigger: Trigger::AbbrSuffix("test".to_string()),
+                trigger: Trigger::AbbrSuffix(".test".to_string()),
                 last_arg: "a.test",
                 expected: Ok(true),
             },
             Scenario {
                 testname: "should match suffix",
-                trigger: Trigger::AbbrSuffix("test".to_string()),
+                trigger: Trigger::AbbrSuffix(".test".to_string()),
                 last_arg: ".test",
                 expected: Ok(true),
             },
             Scenario {
                 testname: "should not match suffix",
-                trigger: Trigger::AbbrSuffix("test".to_string()),
+                trigger: Trigger::AbbrSuffix(".test".to_string()),
                 last_arg: "test",
                 expected: Ok(false),
             },
             Scenario {
-                testname: "should not match suffix",
-                trigger: Trigger::AbbrSuffix("test".to_string()),
-                last_arg: "atest",
+                testname: "should match prefix",
+                trigger: Trigger::AbbrPrefix("test".to_string()),
+                last_arg: "testa",
+                expected: Ok(true),
+            },
+            Scenario {
+                testname: "should match prefix",
+                trigger: Trigger::AbbrPrefix("test".to_string()),
+                last_arg: "test",
+                expected: Ok(true),
+            },
+            Scenario {
+                testname: "should not match prefix",
+                trigger: Trigger::AbbrPrefix("test".to_string()),
+                last_arg: "tes",
                 expected: Ok(false),
             },
             Scenario {

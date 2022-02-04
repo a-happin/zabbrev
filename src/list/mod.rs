@@ -1,4 +1,3 @@
-use crate::config::abbrev::Trigger::*;
 use crate::config::Config;
 use crate::opt::ListArgs;
 use shell_escape::escape;
@@ -11,11 +10,7 @@ pub fn run(args: &ListArgs) {
 
 fn list<W: io::Write>(_args: &ListArgs, config: &Config, out: &mut W) -> Result<(), io::Error> {
     for abbrev in &config.abbrevs {
-        let abbr = match &abbrev.trigger {
-            AbbrString(abbr) => abbr,
-            AbbrSuffix(suffix) => suffix,
-            AbbrRegex(regex) => regex,
-        };
+        let abbr = abbrev.trigger.get_abbr();
         let snippet = escape(Cow::from(&abbrev.snippet));
 
         writeln!(out, "{}={}", abbr, snippet)?;
