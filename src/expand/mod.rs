@@ -2,25 +2,21 @@ use crate::config::{Config, Operation, Snippet};
 use crate::opt::ExpandArgs;
 use shell_escape::escape;
 use std::borrow::Cow;
+use std::convert::TryInto;
 
 #[derive(Debug, PartialEq)]
 pub struct ExpandResult<'a> {
     pub lbuffer: &'a str,
     pub rbuffer: &'a str,
-    pub last_arg: &'a str,
     pub start_index_of_replacement: usize,
     pub end_index_of_replacement: usize,
+    pub args: Vec<&'a str>,
+    pub context_size: usize,
     pub snippet: Snippet<'a>,
     pub append: bool,
     pub prepend: bool,
     pub evaluate: bool,
     pub redraw: bool,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct SplitResult<'a> {
-    pub args_until_last: Vec<&'a str>,
-    pub last_arg: &'a str,
 }
 
 pub fn run(args: &ExpandArgs) {
@@ -42,8 +38,13 @@ pub fn run(args: &ExpandArgs) {
         );
 
         let evaluate = if result.evaluate {
-            let last_arg = escape(Cow::from(result.last_arg));
-            print!(r#"set -- {};"#, last_arg);
+            print!(r#"set --"#);
+            let mut ite = result.args[result.context_size..].iter();
+            while let Some(&arg) = ite.next() {
+                let arg = escape(Cow::from(arg));
+                print!(r#" {}"#, arg);
+            }
+            print!(r#";"#);
             "(e)"
         } else {
             ""
@@ -89,10 +90,8 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
     let command_index = find_last_command_index(lbuffer);
     let command = lbuffer[command_index..].trim_start();
 
-    let SplitResult {
-        args_until_last,
-        last_arg,
-    } = split_args(command);
+    let args = split_args(command);
+    let (&last_arg, args_until_last) = args.split_last().unwrap();
 
     if last_arg.is_empty() {
         return None;
@@ -101,10 +100,11 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
     let match_result = config
         .abbrevs
         .iter()
-        .flat_map(|abbr| abbr.matches(&args_until_last, last_arg))
+        .flat_map(|abbr| abbr.matches(args_until_last, last_arg))
         .next()?;
 
     let cursor = match_result.abbrev.function.cursor.as_deref();
+    let context_size = match_result.context_size;
 
     let (start_index_of_replacement, end_index_of_replacement, append, prepend, snippet) =
         match match_result.abbrev.function.operation {
@@ -120,10 +120,7 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
             }
             Operation::ReplaceFirst(ref snippet) => {
                 let index = lbuffer.len() - command.len();
-                let len = args_until_last
-                    .first()
-                    .map(|&x| x.len())
-                    .unwrap_or_else(|| last_arg.len());
+                let len = args.first().map(|&x| x.len()).unwrap();
                 (
                     index,
                     index + len,
@@ -134,10 +131,10 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
             }
             Operation::ReplaceContext(ref snippet) => {
                 let index = lbuffer.len() - command.len();
-                match match_result.context_size {
+                match context_size {
                     0 => (index, index, false, true, Snippet::new(snippet, cursor)),
                     context_size => {
-                        let last_arg_of_context = args_until_last[context_size - 1];
+                        let &last_arg_of_context = args.get(context_size - 1).unwrap();
                         (
                             index,
                             unsafe { get_subslice_index_unchecked(lbuffer, last_arg_of_context) }
@@ -174,7 +171,8 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
         rbuffer,
         start_index_of_replacement,
         end_index_of_replacement,
-        last_arg,
+        args,
+        context_size,
         snippet,
         append,
         prepend,
@@ -266,10 +264,11 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 1,
+                    args: vec!["g"],
+                    context_size: 0,
+                    snippet: Snippet::Simple("git"),
                     append: false,
                     prepend: false,
-                    last_arg: "g",
-                    snippet: Snippet::Simple("git"),
                     evaluate: false,
                     redraw: false,
                 }),
@@ -283,10 +282,11 @@ mod tests {
                     rbuffer: " --pager=never",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 1,
+                    args: vec!["g"],
+                    context_size: 0,
+                    snippet: Snippet::Simple("git"),
                     append: false,
                     prepend: false,
-                    last_arg: "g",
-                    snippet: Snippet::Simple("git"),
                     evaluate: false,
                     redraw: false,
                 }),
@@ -300,10 +300,11 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 12,
                     end_index_of_replacement: 13,
+                    args: vec!["g"],
+                    context_size: 0,
+                    snippet: Snippet::Simple("git"),
                     append: false,
                     prepend: false,
-                    last_arg: "g",
-                    snippet: Snippet::Simple("git"),
                     evaluate: false,
                     redraw: false,
                 }),
@@ -317,10 +318,11 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 11,
                     end_index_of_replacement: 15,
+                    args: vec!["echo", "hello", "null"],
+                    context_size: 0,
+                    snippet: Snippet::Simple(">/dev/null"),
                     append: false,
                     prepend: false,
-                    last_arg: "null",
-                    snippet: Snippet::Simple(">/dev/null"),
                     evaluate: false,
                     redraw: false,
                 }),
@@ -334,10 +336,11 @@ mod tests {
                     rbuffer: " -m hello",
                     start_index_of_replacement: 16,
                     end_index_of_replacement: 17,
+                    args: vec!["git", "c"],
+                    context_size: 1,
+                    snippet: Snippet::Simple("commit"),
                     append: false,
                     prepend: false,
-                    last_arg: "c",
-                    snippet: Snippet::Simple("commit"),
                     evaluate: false,
                     redraw: false,
                 }),
@@ -363,10 +366,11 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 4,
+                    args: vec!["home"],
+                    context_size: 0,
+                    snippet: Snippet::Simple("$HOME"),
                     append: false,
                     prepend: false,
-                    last_arg: "home",
-                    snippet: Snippet::Simple("$HOME"),
                     evaluate: true,
                     redraw: false,
                 }),
@@ -380,10 +384,11 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 2,
                     end_index_of_replacement: 2,
+                    args: vec!["rm"],
+                    context_size: 0,
+                    snippet: Snippet::Simple("-i"),
                     append: true,
                     prepend: false,
-                    last_arg: "rm",
-                    snippet: Snippet::Simple("-i"),
                     evaluate: false,
                     redraw: false,
                 }),
@@ -397,12 +402,13 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 7,
-                    append: false,
-                    prepend: false,
-                    last_arg: "test.tar",
+                    args: vec!["extract", "test.tar"],
+                    context_size: 1,
                     snippet: Snippet::Simple("tar -xvf"),
                     evaluate: false,
                     redraw: false,
+                    append: false,
+                    prepend: false,
                 }),
             },
             Scenario {
@@ -414,10 +420,11 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 15,
+                    args: vec!["mkdircd", "foo/bar"],
+                    context_size: 1,
+                    snippet: Snippet::Simple("mkdir -p $1 && cd $1"),
                     append: false,
                     prepend: false,
-                    last_arg: "foo/bar",
-                    snippet: Snippet::Simple("mkdir -p $1 && cd $1"),
                     evaluate: true,
                     redraw: false,
                 }),
@@ -431,10 +438,11 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 0,
                     end_index_of_replacement: 0,
+                    args: vec!["test.java"],
+                    context_size: 0,
+                    snippet: Snippet::Simple("java -jar"),
                     append: false,
                     prepend: true,
-                    last_arg: "test.java",
-                    snippet: Snippet::Simple("java -jar"),
                     evaluate: false,
                     redraw: false,
                 }),
@@ -448,10 +456,11 @@ mod tests {
                     rbuffer: "",
                     start_index_of_replacement: 1,
                     end_index_of_replacement: 4,
+                    args: vec!["a", "b", "c"],
+                    context_size: 2,
+                    snippet: Snippet::Simple("A"),
                     append: false,
                     prepend: false,
-                    last_arg: "c",
-                    snippet: Snippet::Simple("A"),
                     evaluate: false,
                     redraw: false,
                 }),
@@ -497,11 +506,11 @@ impl Default for SplitState {
     }
 }
 
-fn split_args<'a>(command: &'a str) -> SplitResult {
+fn split_args<'a>(command: &'a str) -> Vec<&'a str> {
     use SplitState::*;
 
     let mut start = 0;
-    let mut args_until_last = Vec::new();
+    let mut args = Vec::new();
     let mut state = SplitState::default();
     let mut ite = command.char_indices();
 
@@ -534,7 +543,7 @@ fn split_args<'a>(command: &'a str) -> SplitResult {
                             is_escaped: false,
                         },
                         ' ' | '\t' | '\n' => {
-                            args_until_last.push(&command[start..idx]);
+                            args.push(&command[start..idx]);
                             Delimiter
                         }
                         _ => InWord { is_escaped: false },
@@ -568,14 +577,11 @@ fn split_args<'a>(command: &'a str) -> SplitResult {
                 }
             }
             None => {
-                let last_arg = match state {
-                    Delimiter => &command[command.len()..],
-                    _ => &command[start..],
+                match state {
+                    Delimiter => args.push(&command[command.len()..]),
+                    _ => args.push(&command[start..]),
                 };
-                return SplitResult {
-                    args_until_last,
-                    last_arg,
-                };
+                return args;
             }
         }
     }
@@ -583,157 +589,42 @@ fn split_args<'a>(command: &'a str) -> SplitResult {
 
 #[test]
 fn test_split_args() {
-    assert_eq!(
-        split_args(""),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: "",
-        }
-    );
-    assert_eq!(
-        split_args(" "),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: "",
-        }
-    );
-    assert_eq!(
-        split_args(":"),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: ":",
-        }
-    );
-    assert_eq!(
-        split_args("\\"),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: "\\",
-        }
-    );
-    assert_eq!(
-        split_args("\'"),
-        SplitResult {
-            last_arg: "\'",
-            args_until_last: vec![],
-        }
-    );
-    assert_eq!(
-        split_args("\""),
-        SplitResult {
-            last_arg: "\"",
-            args_until_last: vec![],
-        }
-    );
-    assert_eq!(
-        split_args(": "),
-        SplitResult {
-            args_until_last: vec![":"],
-            last_arg: "",
-        }
-    );
-    assert_eq!(
-        split_args("\\ "),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: "\\ ",
-        }
-    );
-    assert_eq!(
-        split_args("\' "),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: "\' ",
-        }
-    );
-    assert_eq!(
-        split_args("\" "),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: "\" ",
-        }
-    );
-    assert_eq!(
-        split_args("git"),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: "git",
-        }
-    );
-    assert_eq!(
-        split_args("git commit"),
-        SplitResult {
-            args_until_last: vec!["git"],
-            last_arg: "commit",
-        }
-    );
-    assert_eq!(
-        split_args("git  commit"),
-        SplitResult {
-            args_until_last: vec!["git"],
-            last_arg: "commit",
-        }
-    );
-    assert_eq!(
-        split_args(" git  commit"),
-        SplitResult {
-            args_until_last: vec!["git"],
-            last_arg: "commit",
-        }
-    );
-    assert_eq!(
-        split_args(" git  commit "),
-        SplitResult {
-            args_until_last: vec!["git", "commit"],
-            last_arg: "",
-        }
-    );
-    assert_eq!(
-        split_args("git\\ commit"),
-        SplitResult {
-            args_until_last: vec![],
-            last_arg: "git\\ commit",
-        }
-    );
-    assert_eq!(
-        split_args("git 'a file.txt'"),
-        SplitResult {
-            args_until_last: vec!["git"],
-            last_arg: "'a file.txt'",
-        }
-    );
+    assert_eq!(split_args(""), vec![""],);
+    assert_eq!(split_args(" "), vec![""],);
+    assert_eq!(split_args(":"), vec![":"],);
+    assert_eq!(split_args("\\"), vec!["\\"],);
+    assert_eq!(split_args("\'"), vec!["\'"],);
+    assert_eq!(split_args("\""), vec!["\""],);
+    assert_eq!(split_args(": "), vec![":", ""],);
+    assert_eq!(split_args("\\ "), vec!["\\ "],);
+    assert_eq!(split_args("\' "), vec!["\' "],);
+    assert_eq!(split_args("\" "), vec!["\" "],);
+    assert_eq!(split_args("git"), vec!["git"],);
+    assert_eq!(split_args("git commit"), vec!["git", "commit"],);
+    assert_eq!(split_args("git  commit"), vec!["git", "commit"],);
+    assert_eq!(split_args(" git  commit"), vec!["git", "commit"],);
+    assert_eq!(split_args(" git  commit "), vec!["git", "commit", ""],);
+    assert_eq!(split_args("git\\ commit"), vec!["git\\ commit"],);
+    assert_eq!(split_args("git 'a file.txt'"), vec!["git", "'a file.txt'"],);
     assert_eq!(
         split_args("git ''a file.txt'"),
-        SplitResult {
-            args_until_last: vec!["git", "''a"],
-            last_arg: "file.txt'",
-        }
+        vec!["git", "''a", "file.txt'"],
     );
     assert_eq!(
         split_args("git '''a file.txt'"),
-        SplitResult {
-            args_until_last: vec!["git"],
-            last_arg: "'''a file.txt'",
-        }
+        vec!["git", "'''a file.txt'"],
     );
     assert_eq!(
         split_args("git 'a \\' file.txt'"),
-        SplitResult {
-            args_until_last: vec!["git"],
-            last_arg: "'a \\' file.txt'",
-        }
+        vec!["git", "'a \\' file.txt'"],
     );
     assert_eq!(
         split_args("git 'a \\\\' file.txt'\\"),
-        SplitResult {
-            args_until_last: vec!["git", "'a \\\\'"],
-            last_arg: "file.txt'\\",
-        }
+        vec!["git", "'a \\\\'", "file.txt'\\"],
     );
 }
 
 unsafe fn get_subslice_index_unchecked<'a>(slice: &'a str, subslice: &'a str) -> usize {
-    use std::convert::TryInto;
     subslice
         .as_ptr()
         .offset_from(slice.as_ptr())
