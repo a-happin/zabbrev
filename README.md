@@ -51,7 +51,7 @@ Following variables are available if `evaluate == true`
 
 |name|description|
 |:-:|-|
-|`$1` , `$2`, ... |expands to arguments that removed matched context)|
+|`$1`, `$2`, ... |expands to arguments that removed matched context|
 
 ### Setup
 
