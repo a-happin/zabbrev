@@ -11,6 +11,7 @@ __zabbrev::expand() {
 }
 
 __zabbrev::expand-and-insert-self() {
+    unset __zabbrev_no_space __zabbrev_redraw
     zle __zabbrev::expand && [[ $__zabbrev_redraw -eq 1 ]] && zle reset-prompt
     [[ $__zabbrev_no_space -ne 1 ]] && zle self-insert
     unset __zabbrev_no_space __zabbrev_redraw

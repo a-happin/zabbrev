@@ -32,10 +32,9 @@ pub fn run(args: &ExpandArgs) {
         let joint_append = if result.append { " " } else { "" };
         let joint_prepend = if result.prepend { " " } else { "" };
 
-        print!(
-            r#"__zabbrev_no_space=;__zabbrev_redraw={};"#,
-            if result.redraw { "1" } else { "" }
-        );
+        if result.redraw {
+            print!(r#"__zabbrev_redraw=1;"#);
+        }
 
         let evaluate = if result.evaluate {
             print!(r#"set --"#);
