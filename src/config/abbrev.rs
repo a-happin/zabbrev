@@ -75,8 +75,6 @@ impl Trigger {
 pub enum Operation {
     #[serde(rename = "replace-self")]
     ReplaceSelf,
-    #[serde(rename = "replace-first")]
-    ReplaceFirst,
     #[serde(rename = "replace-context")]
     ReplaceContext,
     #[serde(rename = "replace-all")]

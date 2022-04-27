@@ -36,7 +36,7 @@ ZSH abbreviation expansion plugin
 |^|abbr-suffix|String|trigger if the last argument ends with `abbr-suffix`|
 |^|abbr-regex|String|trigger if the last argument matches `abbr-regex`|
 ||snippet|String|the string to be expanded **(required)**|
-||operation|String|● `replace-self`: replace the last argument with `snippet` (default)<br>● `replace-first`: replace the first argument with `snippet`<br>● `replace-context`: replace the matched context with `snippet`<br>● `replace-all`: replace whole command with `snippet`<br>● `append`: insert `snippet` after the last argument<br>● `prepend`: insert `snippet` before the first argument|
+||operation|String|● `replace-self`: replace the last argument with `snippet` (default)<br>● `replace-context`: replace the matched context with `snippet`<br>● `replace-all`: replace whole command with `snippet`<br>● `append`: insert `snippet` after the last argument<br>● `prepend`: insert `snippet` before the first argument|
 ||cursor|Option\<String\>|placeholder|
 ||evaluate|bool|● `false`: insert as string (default)<br>● `true`: do zsh parameter expansion, then insert|
 ||redraw|bool|● `false`: do nothing (default)<br>● `true`: force to reset prompt after expansion<br>(Note: set `true` if there is a problem with the display)|
@@ -188,13 +188,13 @@ abbrevs:
     context: 'extract'
     abbr-suffix: '.tar'
     snippet: 'tar -xvf'
-    operation: replace-first
+    operation: replace-context
 
   - name: compress tar
     context: 'compress'
     abbr-suffix: '.tar'
     snippet: 'tar -cvf'
-    operation: replace-first
+    operation: replace-context
 ```
 
 then

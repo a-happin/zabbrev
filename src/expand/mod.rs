@@ -117,17 +117,6 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
                     Snippet::new(&match_result.abbrev.function.snippet, cursor),
                 )
             }
-            Operation::ReplaceFirst => {
-                let index = lbuffer.len() - command.len();
-                let len = args.first().map(|&x| x.len()).unwrap();
-                (
-                    index,
-                    index + len,
-                    false,
-                    false,
-                    Snippet::new(&match_result.abbrev.function.snippet, cursor),
-                )
-            }
             Operation::ReplaceContext => {
                 let index = lbuffer.len() - command.len();
                 match context_size {
@@ -238,7 +227,7 @@ mod tests {
                 context: 'extract'
                 abbr-regex: '\.tar$'
                 snippet: 'tar -xvf'
-                operation: replace-first
+                operation: replace-context
 
               - name: 'function?'
                 context: 'mkdircd'
