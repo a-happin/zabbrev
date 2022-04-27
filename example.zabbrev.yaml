@@ -3,46 +3,54 @@ abbrevs:
   # simple abbreviation
   - name: git
     abbr: 'g'
-    replace-self: 'git'
+    snippet: 'git'
 
   - name: editor
     abbr: 'e'
-    replace-self: '${EDITOR}'
+    snippet: '${EDITOR}'
     evaluate: true
 
   # add default option
   - name: mv -i
     abbr: 'mv'
-    append: '-i'
+    snippet: '-i'
+    operation: append
 
   # prepend sudo
   - name: sudo apt
     abbr: 'apt'
-    prepend: 'sudo'
+    snippet: 'sudo'
+    operation: prepend
+
+  # prepend cd
+  - name: cd ..
+    abbr: '..'
+    snippet: 'cd'
+    operation: prepend
 
   # subcommand abbreviation
   - name: git commit
     context: 'git'
     abbr: 'c'
-    replace-self: 'commit'
+    snippet: 'commit'
 
   - name: git push -u origin HEAD
     context: 'git'
     abbr: 'pu'
-    replace-self: 'push -u origin HEAD'
+    snippet: 'push -u origin HEAD'
 
   # subcommand abbreviation with evaluate
   - name: git pull --rebase origin CURRENT_BRANCH
     context: 'git'
     abbr: 'pr'
-    replace-self: 'pull --rebase origin $(git symbolic-ref --short HEAD)'
+    snippet: 'pull --rebase origin $(git symbolic-ref --short HEAD)'
     evaluate: true
 
   # fix option
   - name: replace -f with --force-with-lease
     context: 'git push'
     abbr: '-f'
-    replace-self: '--force-with-lease'
+    snippet: '--force-with-lease'
     global: true
     evaluate: true
 
@@ -50,71 +58,86 @@ abbrevs:
   - name: compile cpp
     context: 'compile'
     abbr-suffix: '.cpp'
-    replace-first: 'g++ -std=c++2b -Wall -Wextra -pedantic-errors'
+    snippet: 'g++ -std=c++2b -Wall -Wextra -pedantic-errors'
+    operation: replace-context
 
   - name: extract tar
     context: 'extract'
     abbr-suffix: '.tar'
-    replace-first: 'tar -xvf'
+    snippet: 'tar -xvf'
+    operation: replace-context
 
   - name: compress tar
     context: 'compress'
     abbr-suffix: '.tar'
-    replace-first: 'tar -cvf'
+    snippet: 'tar -cvf'
+    operation: replace-context
 
   # associated command
   - name: run jar file
     abbr-suffix: '.jar'
-    prepend: 'java -jar'
+    snippet: 'java -jar'
+    operation: prepend
 
   # like a function
   - name: mkdircd
     context: 'mkdircd'
     abbr-prefix: ''
-    replace-all: 'mkdir -p $1 && cd $1'
+    snippet: 'mkdir -p $1 && cd $1'
+    operation: replace-all
     evaluate: true
 
   # global abbreviation
   - name: '>/dev/null'
-    abbr: 'null'
-    replace-self: '>/dev/null'
+    abbr: '>null'
+    snippet: '>/dev/null 2>&1'
     global: true
 
   # global abbreviation with context
   - name: git current branch
     context: 'git'
     abbr: 'B'
-    replace-self: '$(git symbolic-ref --short HEAD)'
+    snippet: '$(git symbolic-ref --short HEAD)'
+    global: true
+    evaluate: true
+
+  # fix option
+  - name: replace -f with --force-with-lease
+    context: 'git push'
+    abbr: '-f'
+    snippet: '--force-with-lease'
     global: true
     evaluate: true
 
   # as one pleases
   - context: 'cd'
     abbr: 'f'
-    replace-self: $(fd --type d --hidden --no-ignore --exclude .git | fzf --preview 'exa -lha --time-style long-iso --color=always {}')
+    snippet: $(fd --type d --hidden --no-ignore --exclude .git | fzf --preview 'exa -lha --time-style long-iso --color=always {}')
     evaluate: true
     redraw: true
 
   - context: 'cd'
     abbr: 'g'
-    replace-self: $(fd --type d --hidden --follow '^.git$' ~ -x dirname | fzf --preview 'git -c color.status=always -C {} status')
+    snippet: $(fd --type d --hidden --follow '^.git$' ~ -x dirname | fzf --preview 'git -c color.status=always -C {} status')
     evaluate: true
     redraw: true
 
   # choose commit interactively
   - context: 'git rebase'
     abbr: '-i'
-    append: $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always \$(printf '%s' {} | grep -io '[0-9a-f]\{7,\}' | head -1)" | \grep -io '[0-9a-f]\{7,\}' | head -1)
+    snippet: $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always \$(printf '%s' {} | grep -io '[0-9a-f]\{7,\}' | head -1)" | \grep -io '[0-9a-f]\{7,\}' | head -1)
+    operation: append
     evaluate: true
     redraw: true
 
   # ?????
   - context: 'rm -i'
     abbr-prefix: ''
-    replace-context: rm $([[ -d $1 ]] && printf '%s' '-ri' || printf '%s' '-i')
+    snippet: rm $([[ -d $1 ]] && printf '%s' '-ri' || printf '%s' '-i')
+    operation: replace-context
     evaluate: true
 
   # [[  ]]
   - abbr: '[['
-    replace-self: '[[ 🐣 ]]'
+    snippet: '[[ 🐣 ]]'
     cursor: '🐣'

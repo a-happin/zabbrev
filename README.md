@@ -24,7 +24,7 @@ ZSH abbreviation expansion plugin
 #### Abbr
 
 - **required any one of `abbr`, `abbr-prefix`, `abbr-suffix` or `abbr-regex`**
-- **required any one of `replace-self`, `replace-first`, `replace-context`, `replace-all`, `append` or `prepend`**
+- **`snippet` is required**
 
 |Category|key|value type|description|
 |:-:|:-:|:-:|---|
@@ -35,12 +35,8 @@ ZSH abbreviation expansion plugin
 |^|abbr-prefix|String|trigger if the last argument starts with `abbr-prefix`|
 |^|abbr-suffix|String|trigger if the last argument ends with `abbr-suffix`|
 |^|abbr-regex|String|trigger if the last argument matches `abbr-regex`|
-|Operation|replace-self|String|replace the last argument with `snippet`|
-|^|replace-first|String|replace the first argument with `snippet`|
-|^|replace-context|String|replace the matched context with `snippet`|
-|^|replace-all|String|replace whole command with `snippet`|
-|^|append|String|insert `snippet` after the last argument|
-|^|prepend|String|insert `snippet` before the first argument|
+||snippet|String|the string to be expanded **(required)**|
+||operation|String|● `replace-self`: replace the last argument with `snippet` (default)<br>● `replace-first`: replace the first argument with `snippet`<br>● `replace-context`: replace the matched context with `snippet`<br>● `replace-all`: replace whole command with `snippet`<br>● `append`: insert `snippet` after the last argument<br>● `prepend`: insert `snippet` before the first argument|
 ||cursor|Option\<String\>|placeholder|
 ||evaluate|bool|● `false`: insert as string (default)<br>● `true`: do zsh parameter expansion, then insert|
 ||redraw|bool|● `false`: do nothing (default)<br>● `true`: force to reset prompt after expansion<br>(Note: set `true` if there is a problem with the display)|
@@ -73,11 +69,11 @@ abbrevs:
   # simple abbreviation
   - name: git
     abbr: 'g'
-    replace-self: 'git'
+    snippet: 'git'
 
   - name: editor
     abbr: 'e'
-    replace-self: '${EDITOR}'
+    snippet: '${EDITOR}'
     evaluate: true
 ```
 
@@ -101,7 +97,8 @@ abbrevs:
   # add default option
   - name: mv -i
     abbr: 'mv'
-    append: '-i'
+    snippet: '-i'
+    operation: append
 ```
 
 then
@@ -111,7 +108,7 @@ $ mv<Space>
 #  ↓ expanded
 $ mv -i 
 ```
-### Prepend sudo
+### Prepend
 
 ```yaml
 # ~/.config/zsh/zabbrev.yaml
@@ -119,7 +116,14 @@ abbrevs:
   # prepend sudo
   - name: sudo apt
     abbr: 'apt'
-    prepend: 'sudo'
+    snippet: 'sudo'
+    operation: prepend
+
+  # prepend cd
+  - name: cd ..
+    abbr: '..'
+    snippet: 'cd'
+    operation: prepend
 ```
 
 then
@@ -128,6 +132,10 @@ then
 $ apt<Space>
 #  ↓ expanded
 $ sudo apt 
+
+$ ..<Space>
+#  ↓ expanded
+$ cd .. 
 ```
 
 ### Subcommand abbreviation
@@ -139,18 +147,18 @@ abbrevs:
   - name: git commit
     context: 'git'
     abbr: 'c'
-    replace-self: 'commit'
+    snippet: 'commit'
 
   - name: git push -u origin HEAD
     context: 'git'
     abbr: 'pu'
-    replace-self: 'push -u origin HEAD'
+    snippet: 'push -u origin HEAD'
 
   # subcommand abbreviation with evaluate
   - name: git pull --rebase origin CURRENT_BRANCH
     context: 'git'
     abbr: 'pr'
-    replace-self: 'pull --rebase origin $(git symbolic-ref --short HEAD)'
+    snippet: 'pull --rebase origin $(git symbolic-ref --short HEAD)'
     evaluate: true
 ```
 
@@ -179,12 +187,14 @@ abbrevs:
   - name: extract tar
     context: 'extract'
     abbr-suffix: '.tar'
-    replace-first: 'tar -xvf'
+    snippet: 'tar -xvf'
+    operation: replace-first
 
   - name: compress tar
     context: 'compress'
     abbr-suffix: '.tar'
-    replace-first: 'tar -cvf'
+    snippet: 'tar -cvf'
+    operation: replace-first
 ```
 
 then
@@ -209,7 +219,8 @@ abbrevs:
   # associated command
   - name: run jar file
     abbr-suffix: '.jar'
-    prepend: 'java -jar'
+    snippet: 'java -jar'
+    operation: prepend
 ```
 
 then
@@ -231,7 +242,8 @@ abbrevs:
   - name: mkdircd
     context: 'mkdircd'
     abbr-prefix: ''
-    replace-all: 'mkdir -p $1 && cd $1'
+    snippet: 'mkdir -p $1 && cd $1'
+    operation: replace-all
     evaluate: true
 ```
 
@@ -252,17 +264,17 @@ behaves like zsh global abbreviations
 abbrevs:
   # global abbreviation
   - name: '>/dev/null'
-    abbr: 'null'
-    replace-self: '>/dev/null'
+    abbr: '>null'
+    snippet: '>/dev/null 2>&1'
     global: true
 ```
 
 then
 
 ```zsh
-$ type cargo null<Space>
+$ type cargo >null<Space>
 #  ↓ expanded
-$ type cargo >/dev/null 
+$ type cargo >/dev/null 2>&1 
 ```
 
 ### Global abbreviations with context
@@ -282,7 +294,7 @@ abbrevs:
   - name: replace -f with --force-with-lease
     context: 'git push'
     abbr: '-f'
-    replace-self: '--force-with-lease'
+    snippet: '--force-with-lease'
     global: true
     evaluate: true
 ```
@@ -312,32 +324,34 @@ abbrevs:
   # as one pleases
   - context: 'cd'
     abbr: 'f'
-    replace-self: $(fd --type d --hidden --no-ignore --exclude .git | fzf --preview 'exa -lha --time-style long-iso --color=always {}')
+    snippet: $(fd --type d --hidden --no-ignore --exclude .git | fzf --preview 'exa -lha --time-style long-iso --color=always {}')
     evaluate: true
     redraw: true
 
   - context: 'cd'
     abbr: 'g'
-    replace-self: $(fd --type d --hidden --follow '^.git$' ~ -x dirname | fzf --preview 'git -c color.status=always -C {} status')
+    snippet: $(fd --type d --hidden --follow '^.git$' ~ -x dirname | fzf --preview 'git -c color.status=always -C {} status')
     evaluate: true
     redraw: true
 
   # choose commit interactively
   - context: 'git rebase'
     abbr: '-i'
-    append: $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always \$(printf '%s' {} | grep -io '[0-9a-f]\{7,\}' | head -1)" | \grep -io '[0-9a-f]\{7,\}' | head -1)
+    snippet: $(git log --graph --all --oneline --color=always | fzf --ansi --no-sort --reverse --tiebreak index -0 --height=60% --preview "git show --color=always \$(printf '%s' {} | grep -io '[0-9a-f]\{7,\}' | head -1)" | \grep -io '[0-9a-f]\{7,\}' | head -1)
+    operation: append
     evaluate: true
     redraw: true
 
   # ?????
   - context: 'rm -i'
     abbr-prefix: ''
-    replace-context: rm $([[ -d $1 ]] && printf '%s' '-ri' || printf '%s' '-i')
+    snippet: rm $([[ -d $1 ]] && printf '%s' '-ri' || printf '%s' '-i')
+    operation: replace-context
     evaluate: true
 
   # [[  ]]
   - abbr: '[['
-    replace-self: '[[ 🐣 ]]'
+    snippet: '[[ 🐣 ]]'
     cursor: '🐣'
 ```
 
@@ -348,7 +362,7 @@ $ cd f<Space>
 #  ↓ expanded
 $ cd ./Downloads
 
-$ git i<Space>
+$ git rebase -i<Space>
 #  ↓ expanded
 $ git rebase -i 544f368
 
