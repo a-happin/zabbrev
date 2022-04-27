@@ -107,17 +107,17 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
 
     let (start_index_of_replacement, end_index_of_replacement, append, prepend, snippet) =
         match match_result.abbrev.function.operation {
-            Operation::ReplaceSelf(ref snippet) => {
+            Operation::ReplaceSelf => {
                 let index = lbuffer.len() - last_arg.len();
                 (
                     index,
                     lbuffer.len(),
                     false,
                     false,
-                    Snippet::new(snippet, cursor),
+                    Snippet::new(&match_result.abbrev.function.snippet, cursor),
                 )
             }
-            Operation::ReplaceFirst(ref snippet) => {
+            Operation::ReplaceFirst => {
                 let index = lbuffer.len() - command.len();
                 let len = args.first().map(|&x| x.len()).unwrap();
                 (
@@ -125,13 +125,19 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
                     index + len,
                     false,
                     false,
-                    Snippet::new(snippet, cursor),
+                    Snippet::new(&match_result.abbrev.function.snippet, cursor),
                 )
             }
-            Operation::ReplaceContext(ref snippet) => {
+            Operation::ReplaceContext => {
                 let index = lbuffer.len() - command.len();
                 match context_size {
-                    0 => (index, index, false, true, Snippet::new(snippet, cursor)),
+                    0 => (
+                        index,
+                        index,
+                        false,
+                        true,
+                        Snippet::new(&match_result.abbrev.function.snippet, cursor),
+                    ),
                     context_size => {
                         let &last_arg_of_context = args.get(context_size - 1).unwrap();
                         (
@@ -140,28 +146,40 @@ fn expand<'a>(args: &'a ExpandArgs, config: &'a Config) -> Option<ExpandResult<'
                                 + last_arg_of_context.len(),
                             false,
                             false,
-                            Snippet::new(snippet, cursor),
+                            Snippet::new(&match_result.abbrev.function.snippet, cursor),
                         )
                     }
                 }
             }
-            Operation::ReplaceAll(ref snippet) => {
+            Operation::ReplaceAll => {
                 let index = lbuffer.len() - command.len();
                 (
                     index,
                     lbuffer.len(),
                     false,
                     false,
-                    Snippet::new(snippet, cursor),
+                    Snippet::new(&match_result.abbrev.function.snippet, cursor),
                 )
             }
-            Operation::Append(ref snippet) => {
+            Operation::Append => {
                 let index = lbuffer.len();
-                (index, index, true, false, Snippet::new(snippet, cursor))
+                (
+                    index,
+                    index,
+                    true,
+                    false,
+                    Snippet::new(&match_result.abbrev.function.snippet, cursor),
+                )
             }
-            Operation::Prepend(ref snippet) => {
+            Operation::Prepend => {
                 let index = lbuffer.len() - command.len();
-                (index, index, false, true, Snippet::new(snippet, cursor))
+                (
+                    index,
+                    index,
+                    false,
+                    true,
+                    Snippet::new(&match_result.abbrev.function.snippet, cursor),
+                )
             }
         };
 
@@ -190,47 +208,55 @@ mod tests {
             abbrevs:
               - name: git
                 abbr: g
-                replace-self: git
+                snippet: git
 
               - name: git commit
                 abbr: c
-                replace-self: commit
+                snippet: commit
+                operation: replace-self
                 global: false
                 context: 'git'
 
               - name: '>/dev/null'
                 abbr: 'null'
-                replace-self: '>/dev/null'
+                snippet: '>/dev/null'
+                operation: replace-self
                 global: true
 
               - name: $HOME
                 abbr: home
-                replace-self: $HOME
+                snippet: $HOME
+                operation: replace-self
                 evaluate: true
 
               - name: default argument
                 abbr: rm
-                append: -i
+                snippet: -i
+                operation: append
 
               - name: fake command
                 context: 'extract'
                 abbr-regex: '\.tar$'
-                replace-first: 'tar -xvf'
+                snippet: 'tar -xvf'
+                operation: replace-first
 
               - name: 'function?'
                 context: 'mkdircd'
                 abbr-regex: '.+'
-                replace-all: 'mkdir -p $1 && cd $1'
+                snippet: 'mkdir -p $1 && cd $1'
+                operation: replace-all
                 evaluate: true
 
               - name: associated command
                 abbr-regex: '\.java$'
-                prepend: 'java -jar'
+                snippet: 'java -jar'
+                operation: prepend
 
               - name: context replacement
                 context: 'a b'
                 abbr: c
-                replace-context: 'A'
+                snippet: 'A'
+                operation: replace-context
             ",
         )
         .unwrap()

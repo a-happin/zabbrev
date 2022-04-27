@@ -11,7 +11,7 @@ pub fn run(args: &ListArgs) {
 fn list<W: io::Write>(_args: &ListArgs, config: &Config, out: &mut W) -> Result<(), io::Error> {
     for abbrev in &config.abbrevs {
         let abbr = abbrev.trigger.get_abbr();
-        let snippet = escape(Cow::from(abbrev.function.get_snippet_string()));
+        let snippet = escape(Cow::from(&abbrev.function.snippet));
 
         writeln!(out, "{}={}", abbr, snippet)?;
     }
@@ -29,22 +29,22 @@ mod tests {
             abbrevs:
               - name: git
                 abbr: g
-                replace-self: git
+                snippet: git
 
               - name: git commit
-                abbr: c
-                replace-self: commit
-                global: true
                 context: 'git'
+                abbr: c
+                snippet: commit
+                global: true
 
               - name: '>/dev/null'
-                abbr: 'null'
-                replace-self: '>/dev/null'
+                abbr: '>null'
+                snippet: '>/dev/null'
                 global: true
 
               - name: $HOME
                 abbr: home
-                replace-self: $HOME
+                snippet: $HOME
                 evaluate: true
             ",
         )
@@ -63,7 +63,7 @@ mod tests {
 
         let expected = r"g=git
 c=commit
-null='>/dev/null'
+>null='>/dev/null'
 home='$HOME'
 ";
 

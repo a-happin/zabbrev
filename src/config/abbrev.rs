@@ -74,35 +74,29 @@ impl Trigger {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Operation {
     #[serde(rename = "replace-self")]
-    ReplaceSelf(String),
+    ReplaceSelf,
     #[serde(rename = "replace-first")]
-    ReplaceFirst(String),
+    ReplaceFirst,
     #[serde(rename = "replace-context")]
-    ReplaceContext(String),
+    ReplaceContext,
     #[serde(rename = "replace-all")]
-    ReplaceAll(String),
+    ReplaceAll,
     #[serde(rename = "append")]
-    Append(String),
+    Append,
     #[serde(rename = "prepend")]
-    Prepend(String),
+    Prepend,
 }
-impl Operation {
-    #[inline]
-    fn get_snippet_string(&self) -> &str {
-        match self {
-            Self::ReplaceSelf(snippet) => snippet,
-            Self::ReplaceFirst(snippet) => snippet,
-            Self::ReplaceContext(snippet) => snippet,
-            Self::ReplaceAll(snippet) => snippet,
-            Self::Append(snippet) => snippet,
-            Self::Prepend(snippet) => snippet,
-        }
+impl Default for Operation {
+    fn default() -> Self {
+        Self::ReplaceSelf
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Function {
-    #[serde(flatten)]
+    pub snippet: String,
+
+    #[serde(default)]
     pub operation: Operation,
 
     pub cursor: Option<String>,
@@ -115,13 +109,9 @@ pub struct Function {
 }
 impl Function {
     #[inline]
-    pub fn get_snippet_string(&self) -> &str {
-        self.operation.get_snippet_string()
-    }
-    #[inline]
     #[allow(dead_code)]
     fn get_snippet(&self) -> Snippet {
-        Snippet::new(self.get_snippet_string(), self.cursor.as_deref())
+        Snippet::new(&self.snippet, self.cursor.as_deref())
     }
 }
 
@@ -162,7 +152,7 @@ impl Abbrev {
     pub fn get_name(&self) -> &str {
         match self.name {
             Some(ref name) => name,
-            None => self.function.get_snippet_string(),
+            None => &self.function.snippet,
         }
     }
 }
@@ -510,7 +500,8 @@ mod tests {
             Scenario {
                 testname: "no division",
                 function: Function {
-                    operation: Operation::ReplaceSelf("[[ <> ]]".to_string()),
+                    snippet: "[[ <> ]]".to_string(),
+                    operation: Operation::ReplaceSelf,
                     cursor: None,
                     evaluate: false,
                     redraw: false,
@@ -520,7 +511,8 @@ mod tests {
             Scenario {
                 testname: "division failed",
                 function: Function {
-                    operation: Operation::ReplaceSelf("[[ <> ]]".to_string()),
+                    snippet: "[[ <> ]]".to_string(),
+                    operation: Operation::ReplaceSelf,
                     cursor: Some("🐣".to_string()),
                     evaluate: false,
                     redraw: false,
@@ -530,7 +522,8 @@ mod tests {
             Scenario {
                 testname: "divide correctly",
                 function: Function {
-                    operation: Operation::ReplaceSelf("[[ 🐣 ]]".to_string()),
+                    snippet: "[[ 🐣 ]]".to_string(),
+                    operation: Operation::ReplaceSelf,
                     cursor: Some("🐣".to_string()),
                     evaluate: false,
                     redraw: false,
